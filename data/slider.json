@@ -1,0 +1,44 @@
+[
+  {
+    "id": "slide-1",
+    "eyebrow": "WELCOME",
+    "title": "모든 세대가 함께\n어우러지는 교회",
+    "description": "학생, 청년, 장년 모든세대가 사랑으로 함께 갑니다.",
+    "accent": "#F6EBDC",
+    "imagePath": "/image/church-background.png",
+    "primaryLabel": "예배 안내보기",
+    "primaryHref": "/about/worship-times",
+    "secondaryLabel": "교회 안내",
+    "secondaryHref": "/about",
+    "order": 1,
+    "active": true
+  },
+  {
+    "id": "slide-2",
+    "eyebrow": "WELCOME",
+    "title": "모든 세대가 함께\n어우러지는 교회",
+    "description": "학생, 청년, 장년 모든세대가 사랑으로 함께 갑니다.",
+    "accent": "#F8E6CD",
+    "imagePath": "/image/main_3.png",
+    "primaryLabel": "예배 안내보기",
+    "primaryHref": "/about/worship-times",
+    "secondaryLabel": "교회 안내",
+    "secondaryHref": "/about",
+    "order": 2,
+    "active": true
+  },
+  {
+    "id": "slide-3",
+    "eyebrow": "WELCOME",
+    "title": "모든 세대가 함께\n어우러지는 교회",
+    "description": "학생, 청년, 장년 모든세대가 사랑으로 함께 갑니다.",
+    "accent": "#F5DEB3",
+    "imagePath": "/image/main_4.png",
+    "primaryLabel": "예배 안내보기",
+    "primaryHref": "/about/worship-times",
+    "secondaryLabel": "교회 안내",
+    "secondaryHref": "/about",
+    "order": 3,
+    "active": true
+  }
+]

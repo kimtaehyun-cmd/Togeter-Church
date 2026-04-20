@@ -1,0 +1,51 @@
+[
+  {
+    "id": "worship-1",
+    "day": "주일 예배",
+    "description": "모든 성도가 함께 모여 예배드리는 메인 시간입니다.",
+    "services": [
+      {
+        "id": "worship-service-1",
+        "name": "주일 1부",
+        "time": "11:00",
+        "location": "",
+        "note": ""
+      },
+      {
+        "id": "worship-service-2",
+        "name": "주일 2부",
+        "time": "오후 1:30",
+        "location": "",
+        "note": ""
+      }
+    ]
+  },
+  {
+    "id": "worship-2",
+    "day": "주중 예배",
+    "description": "평일에도 말씀과 기도로 삶을 다시 세워갑니다.",
+    "services": [
+      {
+        "id": "worship-2-service-1",
+        "name": "새벽 기도회",
+        "time": "06:00",
+        "location": "",
+        "note": ""
+      },
+      {
+        "id": "worship-2-service-2",
+        "name": "수요 예배",
+        "time": "오후 7:30",
+        "location": "",
+        "note": ""
+      },
+      {
+        "id": "worship-2-service-3",
+        "name": "금요 기도회",
+        "time": "오후 8:00",
+        "location": "",
+        "note": ""
+      }
+    ]
+  }
+]
