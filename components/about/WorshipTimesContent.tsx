@@ -8,6 +8,14 @@ import { firstVisitPoints, siteAssets } from '@/lib/site';
 
 export default function WorshipTimesContent() {
   const worshipSchedule = getWorshipSchedule();
+  const sundaySection = worshipSchedule.find(section => section.day.includes('주일')) ?? worshipSchedule[0];
+  const recommendedService = sundaySection?.services.find(service => service.name.includes('2부')) ?? sundaySection?.services[0];
+  const recommendedServiceLabel = recommendedService
+    ? `${recommendedService.name} · ${recommendedService.time}`
+    : '아래 시간표에서 최신 예배 시간을 확인해 주세요';
+  const recommendedServiceDescription = recommendedService
+    ? `${recommendedService.time}에 시작하는 ${recommendedService.name}는 처음 방문하시는 분들도 여유 있게 참여하실 수 있도록 준비되어 있습니다.`
+    : '주일과 주중 예배 시간을 아래 시간표에서 확인하실 수 있습니다.';
 
   return (
     <AboutPageFrame
@@ -39,12 +47,17 @@ export default function WorshipTimesContent() {
             <h2 className="mt-5 text-2xl font-bold md:text-3xl" style={{ color: '#1E1B4B' }}>
               처음 방문하신다면
               <br />
-              주일 2부 예배가 가장 편안합니다
+              가장 편하게 참여할 수 있는 예배를 확인해 보세요
             </h2>
             <p className="mt-4 text-sm leading-7 md:text-base" style={{ color: '#5F6570' }}>
-              오전 11시에 시작하는 주일 2부 예배는 처음 오시는 분들도 자연스럽게 참여하기 좋도록
-              준비되어 있습니다. 안내가 필요하시면 예배 전후로 편하게 도움을 받으실 수 있습니다.
+              {recommendedServiceDescription} 안내가 필요하시면 예배 전후로 편하게 도움을 받으실 수 있습니다.
             </p>
+            <div
+              className="mt-5 inline-flex rounded-full px-4 py-2 text-sm font-semibold"
+              style={{ backgroundColor: '#F5EBDD', color: '#8B5E34' }}
+            >
+              {recommendedServiceLabel}
+            </div>
             <div className="mt-6 space-y-3">
               {firstVisitPoints.map(point => (
                 <div
@@ -98,37 +111,61 @@ export default function WorshipTimesContent() {
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                {group.services.map(service => (
-                  <div
-                    key={service.id}
-                    className="rounded-2xl border p-5 transition-all duration-200 hover:shadow-md"
-                    style={{ borderColor: '#EEE4D7', backgroundColor: '#FFFCF8' }}
-                  >
+                {group.services.map(service => {
+                  const isRecommended = recommendedService?.id === service.id;
+                  const serviceTags = [service.location, service.note].filter(Boolean);
+
+                  return (
                     <div
-                      className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl"
-                      style={{ backgroundColor: '#F5EBDD' }}
+                      key={service.id}
+                      className="rounded-2xl border p-5 transition-all duration-200 hover:shadow-md"
+                      style={{
+                        borderColor: isRecommended ? '#D9B88F' : '#EEE4D7',
+                        backgroundColor: isRecommended ? '#FFF8F1' : '#FFFCF8',
+                      }}
                     >
-                      <Clock size={18} style={{ color: '#8B5E34' }} />
+                      <div className="mb-4 flex items-start justify-between gap-3">
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-xl"
+                          style={{ backgroundColor: '#F5EBDD' }}
+                        >
+                          <Clock size={18} style={{ color: '#8B5E34' }} />
+                        </div>
+                        {isRecommended ? (
+                          <span
+                            className="rounded-full px-3 py-1 text-xs font-semibold"
+                            style={{ backgroundColor: '#8B5E34', color: '#FFFFFF' }}
+                          >
+                            처음 방문 추천
+                          </span>
+                        ) : null}
+                      </div>
+                      <h3 className="mb-1 font-bold" style={{ color: '#1E1B4B' }}>
+                        {service.name}
+                      </h3>
+                      <p className="mb-2 text-2xl font-bold" style={{ color: '#8B5E34' }}>
+                        {service.time}
+                      </p>
+                      {serviceTags.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          {serviceTags.map(tag => (
+                            <span
+                              key={tag}
+                              className="rounded-full px-2 py-0.5 text-xs"
+                              style={{ backgroundColor: '#F5EBDD', color: '#6E4A2F' }}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs" style={{ color: '#94A3B8' }}>
+                          상세 장소와 추가 안내는 현장에서 도와드립니다.
+                        </span>
+                      )}
                     </div>
-                    <h3 className="mb-1 font-bold" style={{ color: '#1E1B4B' }}>
-                      {service.name}
-                    </h3>
-                    <p className="mb-2 text-2xl font-bold" style={{ color: '#8B5E34' }}>
-                      {service.time}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="rounded-full px-2 py-0.5 text-xs"
-                        style={{ backgroundColor: '#F5EBDD', color: '#6E4A2F' }}
-                      >
-                        {service.location}
-                      </span>
-                      <span className="text-xs" style={{ color: '#94A3B8' }}>
-                        {service.note}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           ))}

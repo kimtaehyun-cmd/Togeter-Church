@@ -1,11 +1,10 @@
 import Image from 'next/image';
-import { Calendar, Play, User, Video } from 'lucide-react';
+import { Calendar, Play, User } from 'lucide-react';
 
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
-import PageHero from '@/components/PageHero';
 import { getSermons, Sermon } from '@/lib/data';
-import { sermonCategories, siteAssets } from '@/lib/site';
+import { sermonCategories } from '@/lib/site';
 
 const CATEGORY_META: Record<
   Sermon['category'],
@@ -30,6 +29,11 @@ const CATEGORY_META: Record<
     background: '#FEF3C7',
   },
 };
+
+function getDateValue(date: string) {
+  const value = new Date(date.replace(/\./g, '-')).getTime();
+  return Number.isNaN(value) ? 0 : value;
+}
 
 function SermonCard({ sermon }: { sermon: Sermon }) {
   const meta = CATEGORY_META[sermon.category];
@@ -102,6 +106,18 @@ function SermonCard({ sermon }: { sermon: Sermon }) {
 
 export default function SermonsPage() {
   const allSermons = getSermons();
+  const groupedSermons = sermonCategories.map(category => {
+    const sermons = allSermons
+      .filter(sermon => sermon.category === category)
+      .sort((a, b) => getDateValue(b.date) - getDateValue(a.date));
+
+    return {
+      category,
+      meta: CATEGORY_META[category],
+      latest: sermons[0],
+      sermons,
+    };
+  });
 
   return (
     <>
@@ -109,13 +125,26 @@ export default function SermonsPage() {
     <main className="flex-1 pt-32 md:pt-40">
 
         <div className="max-w-[1400px] mx-auto px-4 py-18 md:py-20">
+          <section
+            className="mb-10 rounded-[2rem] border p-6 md:p-8"
+            style={{ borderColor: '#E9D7C3', backgroundColor: '#FFF8F1' }}
+          >
+            <span
+              className="inline-flex rounded-full px-4 py-1.5 text-xs font-semibold tracking-[0.18em] uppercase"
+              style={{ backgroundColor: '#F5EBDD', color: '#8B5E34' }}
+            >
+              Sermon Archive
+            </span>
+            <h1 className="mt-4 text-3xl font-bold md:text-4xl" style={{ color: '#1E1B4B' }}>
+              최근 설교와 지난 설교를 함께 확인하세요
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-7 md:text-base" style={{ color: '#5F6570' }}>
+              카테고리별 최신 설교를 먼저 보고, 아래 아카이브에서 이전 설교도 바로 열어보실 수 있도록 정리했습니다.
+            </p>
+          </section>
+
           <div className="grid gap-6 md:grid-cols-3">
-            {sermonCategories.map(category => {
-              const filtered = allSermons
-                .filter(s => s.category === category)
-                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-              const latest = filtered[0];
-              const meta = CATEGORY_META[category];
+            {groupedSermons.map(({ category, latest, meta, sermons }) => {
 
               return (
                 <section key={category}>
@@ -132,6 +161,9 @@ export default function SermonsPage() {
                     <p className="mt-2 text-sm leading-6" style={{ color: '#64748B' }}>
                       {meta.description}
                     </p>
+                    <p className="mt-3 text-xs font-medium" style={{ color: meta.accent }}>
+                      전체 {sermons.length}편
+                    </p>
                   </div>
 
                   {latest ? (
@@ -145,6 +177,107 @@ export default function SermonsPage() {
               );
             })}
           </div>
+
+          <section className="mt-16 rounded-[2rem] border bg-white p-6 md:p-8" style={{ borderColor: '#EEE4D7' }}>
+            <div className="mb-8 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold" style={{ color: '#1E1B4B' }}>
+                  설교 아카이브
+                </h2>
+                <p className="mt-2 text-sm leading-6" style={{ color: '#64748B' }}>
+                  최신 설교를 포함해 등록된 모든 설교를 날짜순으로 살펴보실 수 있습니다.
+                </p>
+              </div>
+              <p className="text-sm font-medium" style={{ color: '#8B5E34' }}>
+                총 {allSermons.length}편
+              </p>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-3">
+              {groupedSermons.map(({ category, sermons, meta }) => (
+                <section
+                  key={`${category}-archive`}
+                  className="rounded-[1.75rem] border p-5"
+                  style={{ borderColor: '#EEE4D7', backgroundColor: '#FFFCF8' }}
+                >
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold" style={{ color: '#1E1B4B' }}>
+                        {category}
+                      </h3>
+                      <p className="mt-1 text-xs" style={{ color: '#64748B' }}>
+                        {meta.description}
+                      </p>
+                    </div>
+                    <span
+                      className="rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{ backgroundColor: meta.background, color: meta.accent }}
+                    >
+                      {sermons.length}편
+                    </span>
+                  </div>
+
+                  {sermons.length > 0 ? (
+                    <div className="space-y-3">
+                      {sermons.map((sermon, index) => (
+                        <article
+                          key={sermon.id}
+                          className="rounded-2xl border bg-white p-4"
+                          style={{ borderColor: '#EEE4D7' }}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {index === 0 ? (
+                                  <span
+                                    className="rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                                    style={{ backgroundColor: '#F5EBDD', color: '#8B5E34' }}
+                                  >
+                                    최신
+                                  </span>
+                                ) : null}
+                                <span className="text-xs" style={{ color: '#94A3B8' }}>
+                                  {sermon.date}
+                                </span>
+                              </div>
+                              <h4 className="mt-2 text-sm font-semibold leading-6" style={{ color: '#1E1B4B' }}>
+                                {sermon.title}
+                              </h4>
+                              <p className="mt-1 text-xs leading-5" style={{ color: '#64748B' }}>
+                                {sermon.preacher}
+                              </p>
+                            </div>
+                            {sermon.youtubeId ? (
+                              <a
+                                href={`https://www.youtube.com/watch?v=${sermon.youtubeId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex flex-shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-colors duration-200"
+                                style={{ backgroundColor: meta.background, color: meta.accent }}
+                              >
+                                <Play size={12} />
+                                영상 보기
+                              </a>
+                            ) : (
+                              <span className="text-xs font-medium" style={{ color: '#94A3B8' }}>
+                                영상 준비 중
+                              </span>
+                            )}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed py-10 text-center" style={{ borderColor: '#E2E8F0' }}>
+                      <p className="text-sm" style={{ color: '#94A3B8' }}>
+                        아직 등록된 설교가 없습니다.
+                      </p>
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          </section>
         </div>
       </main>
       <Footer />

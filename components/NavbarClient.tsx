@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ChevronDown, Menu, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { aboutSections } from '@/components/about/aboutSections';
@@ -30,36 +30,52 @@ const secondaryNavItems = [
 
 export default function NavbarClient({ currentUser, logoutAction }: NavbarClientProps) {
   const pathname = usePathname();
+
+  return (
+    <NavbarClientContent
+      key={pathname}
+      pathname={pathname}
+      currentUser={currentUser}
+      logoutAction={logoutAction}
+    />
+  );
+}
+
+type NavbarClientContentProps = NavbarClientProps & {
+  pathname: string;
+};
+
+function NavbarClientContent({
+  currentUser,
+  logoutAction,
+  pathname,
+}: NavbarClientContentProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const lastScrollY = useRef(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isHomePage = pathname === '/';
-  
-  // Transition logic applies to all pages now as requested
+
   const transparentMode = !isScrolled;
 
   useEffect(() => {
+    lastScrollY.current = window.scrollY;
+
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      
-      // 1. Background State
+
       setIsScrolled(currentScrollY > 50);
 
-      // 2. Visibility State (only for subpages)
       if (!isHomePage) {
         const diff = currentScrollY - lastScrollY.current;
-        
-        // Instant reappear on any upward scroll (diff < 0)
-        // Soft hide on significant downward scroll (diff > 10)
+
         if (diff > 10 && currentScrollY > 150) {
           setIsVisible(false);
         } else if (diff < 0 || currentScrollY < 20) {
           setIsVisible(true);
         }
       } else {
-        // Always show on home page
         setIsVisible(true);
       }
 
@@ -67,33 +83,23 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    handleScroll(); // Initial check
+    handleScroll();
 
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [isHomePage, pathname]); // Added pathname to ensure listener re-binds correctly on all navigations
+  }, [isHomePage]);
 
-  useEffect(() => {
-    // Reset state on path change
-    setIsMobileMenuOpen(false);
-    setIsVisible(true);
-    lastScrollY.current = window.scrollY;
-  }, [pathname]);
-
-  // For home page, we use white text when transparent. 
-  // For other pages (which have lighter PageHeros), we use dark text
-  const textColor = transparentMode 
-    ? (isHomePage ? 'text-white' : 'text-[#475569]') 
+  const textColor = transparentMode
+    ? (isHomePage ? 'text-white' : 'text-[#475569]')
     : 'text-[#475569]';
-  
-  const brandColor = transparentMode 
-    ? (isHomePage ? 'text-white' : 'text-[#1E1B4B]') 
+
+  const brandColor = transparentMode
+    ? (isHomePage ? 'text-white' : 'text-[#1E1B4B]')
     : 'text-[#1E1B4B]';
 
-  const bgColor = transparentMode 
-    ? 'bg-transparent border-transparent' 
+  const bgColor = transparentMode
+    ? 'bg-transparent border-transparent'
     : 'bg-white/92 shadow-sm backdrop-blur-md border-[#EEE4D7] shadow-md';
 
-  // Soft fade transition logic
   const visibilityClass = !isHomePage && !isVisible && !isMobileMenuOpen
     ? 'opacity-0 invisible'
     : 'opacity-100 visible';
@@ -101,7 +107,7 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
   return (
     <header
       className={`fixed left-0 right-0 top-0 z-50 border-b transition-all duration-700 ease-in-out ${bgColor} ${visibilityClass}`}
-      style={{ height: '7rem' }} // h-28 = 112px = 7rem
+      style={{ height: '7rem' }}
     >
       <nav className="mx-auto flex h-full max-w-[1400px] items-center gap-4 px-6 md:gap-8">
         <Link href="/" className="flex shrink-0 items-center gap-4">
@@ -183,9 +189,9 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
                 ) : null}
                 <span
                   className="max-w-32 truncate rounded-xl px-5 py-2.5 text-base font-bold"
-                  style={{ 
-                    color: transparentMode ? 'white' : '#6B7280', 
-                    backgroundColor: transparentMode ? 'rgba(255,255,255,0.15)' : '#F8F4EE' 
+                  style={{
+                    color: transparentMode ? 'white' : '#6B7280',
+                    backgroundColor: transparentMode ? 'rgba(255,255,255,0.15)' : '#F8F4EE',
                   }}
                   title={currentUser.name}
                 >
@@ -224,8 +230,8 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
           </div>
         </div>
 
-        <button 
-          className="relative ml-auto md:hidden p-2"
+        <button
+          className="relative ml-auto p-2 md:hidden"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         >
           {isMobileMenuOpen ? (
@@ -238,7 +244,7 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
         {/* Mobile Menu */}
         {isMobileMenuOpen && (
           <div
-            className="fixed left-0 right-0 top-28 bottom-0 z-40 overflow-y-auto bg-white px-6 pb-12 shadow-xl animate-in slide-in-from-top duration-300"
+            className="fixed bottom-0 left-0 right-0 top-28 z-40 overflow-y-auto bg-white px-6 pb-12 shadow-xl animate-in slide-in-from-top duration-300"
           >
             <ul className="flex flex-col gap-2 pt-6">
               <li className="rounded-xl">
@@ -252,7 +258,7 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
                       className="transition-transform duration-200 group-open:rotate-180"
                     />
                   </summary>
-                  <div className="px-4 pb-4 space-y-1">
+                  <div className="space-y-1 px-4 pb-4">
                     {aboutSections.map(section => (
                       <Link
                         key={section.href}
@@ -280,13 +286,13 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
             <div className="mt-8 space-y-3 border-t border-[#EEE4D7] pt-8">
               {currentUser ? (
                 <>
-                  <div className="rounded-2xl px-6 py-4 text-center text-lg font-bold text-[#6B7280] bg-[#F8F4EE]">
+                  <div className="rounded-2xl bg-[#F8F4EE] px-6 py-4 text-center text-lg font-bold text-[#6B7280]">
                     {currentUser.name}
                   </div>
                   {currentUser.role === 'admin' && (
                     <Link
                       href="/admin"
-                      className="block rounded-2xl border border-[#D9C7B1] px-6 py-4 text-center text-lg font-bold text-[#8B5E34] bg-[#FFF8F1]"
+                      className="block rounded-2xl border border-[#D9C7B1] bg-[#FFF8F1] px-6 py-4 text-center text-lg font-bold text-[#8B5E34]"
                     >
                       관리자
                     </Link>
@@ -302,7 +308,7 @@ export default function NavbarClient({ currentUser, logoutAction }: NavbarClient
                 <div className="grid grid-cols-2 gap-3">
                   <Link
                     href="/login"
-                    className="rounded-2xl border border-[#E7D8C8] px-6 py-4 text-center text-lg font-bold text-[#6B7280] bg-white"
+                    className="rounded-2xl border border-[#E7D8C8] bg-white px-6 py-4 text-center text-lg font-bold text-[#6B7280]"
                   >
                     로그인
                   </Link>

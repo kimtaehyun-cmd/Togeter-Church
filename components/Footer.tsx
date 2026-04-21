@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Mail, MapPin, Phone } from 'lucide-react';
+import { MapPin, Phone } from 'lucide-react';
 
 import { getChurchProfile } from '@/lib/data';
 import { siteAssets } from '@/lib/site';
@@ -54,7 +54,7 @@ export default function Footer() {
                 { href: '/about/directions', label: '오시는 길' },
                 { href: '/new-family', label: '새가족등록' },
                 { href: '/sermons', label: '설교 다시보기' },
-                { href: '/community', label: '커뮤니티' },
+                { href: '/together', label: '함께함 갤러리' },
               ].map(link => (
                 <li key={link.href}>
                   <Link

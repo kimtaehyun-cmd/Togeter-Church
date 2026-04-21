@@ -45,8 +45,8 @@ export default async function LoginPage() {
               className="mt-5 max-w-2xl text-sm leading-8 md:text-base"
               style={{ color: '#5F6570' }}
             >
-              교회 소식 확인, 커뮤니티 참여, 새가족 등록 등 홈페이지의 주요 메뉴를
-              더 편하게 이용할 수 있도록 로그인 화면을 준비했습니다.
+              교회 소식 확인, 함께함 갤러리 이용, 새가족 등록 등 홈페이지의 주요
+              메뉴를 더 편하게 이용할 수 있도록 로그인 화면을 준비했습니다.
             </p>
           </section>
 

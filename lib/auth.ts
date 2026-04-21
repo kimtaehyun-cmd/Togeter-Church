@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -9,7 +9,11 @@ import { type User, getUsers } from '@/lib/data';
 
 const SESSION_COOKIE_NAME = 'church_session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
-const SESSION_SECRET = process.env.SESSION_SECRET || 'church-dev-session-secret-change-me';
+const MIN_SESSION_SECRET_LENGTH = 32;
+const INSECURE_SESSION_SECRETS = new Set(['church-dev-session-secret-change-me']);
+
+let cachedSessionSecret: string | null = null;
+let hasWarnedAboutDerivedDevSecret = false;
 
 type SessionPayload = {
   userId: string;
@@ -32,8 +36,51 @@ function decodeBase64Url(value: string) {
   return Buffer.from(`${normalized}${padding}`, 'base64').toString('utf-8');
 }
 
+function createDerivedDevSessionSecret() {
+  return createHash('sha256')
+    .update([
+      process.cwd(),
+      process.env.USERNAME ?? process.env.USER ?? 'local-user',
+      process.env.npm_package_name ?? 'church-website',
+    ].join(':'))
+    .digest('base64url');
+}
+
+function getSessionSecret() {
+  if (cachedSessionSecret) {
+    return cachedSessionSecret;
+  }
+
+  const configuredSecret = process.env.SESSION_SECRET?.trim();
+
+  if (
+    configuredSecret &&
+    !INSECURE_SESSION_SECRETS.has(configuredSecret) &&
+    configuredSecret.length >= MIN_SESSION_SECRET_LENGTH
+  ) {
+    cachedSessionSecret = configuredSecret;
+    return cachedSessionSecret;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      `SESSION_SECRET must be set to a unique value with at least ${MIN_SESSION_SECRET_LENGTH} characters in production.`,
+    );
+  }
+
+  if (!hasWarnedAboutDerivedDevSecret) {
+    hasWarnedAboutDerivedDevSecret = true;
+    console.warn(
+      `SESSION_SECRET is missing, too short, or using a placeholder value. A derived development secret will be used outside production.`,
+    );
+  }
+
+  cachedSessionSecret = createDerivedDevSessionSecret();
+  return cachedSessionSecret;
+}
+
 function sign(value: string) {
-  return createHmac('sha256', SESSION_SECRET).update(value).digest('base64url');
+  return createHmac('sha256', getSessionSecret()).update(value).digest('base64url');
 }
 
 function safeRedirectPath(pathname: string | null | undefined, fallback: string) {

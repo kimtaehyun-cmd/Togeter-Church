@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "함께가는교회 | Together Church",
-  description: "서울시 도봉구 도당로 118에 위치한 함께가는교회입니다. 예배 안내, 설교 다시보기, 교회 소식과 커뮤니티를 확인하세요.",
+  description: "서울시 도봉구 도당로 118에 위치한 함께가는교회입니다. 예배 안내, 설교 다시보기, 교회 소식과 새가족 등록 정보를 확인하세요.",
 };
 
 export default function RootLayout({

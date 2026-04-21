@@ -6,7 +6,6 @@ import {
   ImageIcon,
   LayoutDashboard,
   MapPinned,
-  MessageSquare,
   Video,
   Users,
   Image,
@@ -16,7 +15,6 @@ import AdminShell from '@/app/admin/_components/AdminShell';
 import {
   getAnnouncements,
   getChurchProfile,
-  getPosts,
   getSermons,
   getSliderItems,
   getTogetherPosts,
@@ -27,8 +25,6 @@ import {
 export default function AdminPage() {
   const announcements = getAnnouncements();
   const sermons = getSermons();
-  const posts = getPosts({ includeHidden: true });
-  const hiddenPosts = posts.filter(post => post.hidden).length;
   const sliderItems = getSliderItems();
   const churchProfile = getChurchProfile();
   const worshipSchedule = getWorshipSchedule();
@@ -53,15 +49,6 @@ export default function AdminPage() {
       href: '/admin/sermons',
       bg: '#EDE9FE',
       color: '#5B21B6',
-    },
-    {
-      label: '커뮤니티 글',
-      count: posts.length,
-      helper: `${hiddenPosts}개 숨김 처리`,
-      icon: MessageSquare,
-      href: '/admin/posts',
-      bg: '#FEF3C7',
-      color: '#CA8A04',
     },
     {
       label: '메인 슬라이더',
@@ -113,7 +100,7 @@ export default function AdminPage() {
   return (
     <AdminShell
       title="함께가는교회 관리자"
-      description="공지, 설교, 메인 슬라이더, 교회 소개, 커뮤니티 노출 상태까지 한 곳에서 관리할 수 있도록 정리했습니다."
+      description="공지, 설교, 메인 슬라이더, 교회 소개, 예배 시간표, 함께함 갤러리와 새가족 등록까지 한 곳에서 관리할 수 있도록 정리했습니다."
       backHref="/"
       backLabel="홈으로"
       actions={
@@ -201,13 +188,6 @@ export default function AdminPage() {
               description: '인사말, 표어, 주소, 연락처, 지도 링크를 수정합니다.',
               icon: MapPinned,
               color: '#15803D',
-            },
-            {
-              href: '/admin/posts',
-              label: '커뮤니티 관리',
-              description: '삭제 또는 숨김 처리로 공개 노출을 조절합니다.',
-              icon: MessageSquare,
-              color: '#CA8A04',
             },
             {
               href: '/admin/worship',

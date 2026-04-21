@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { workAsyncStorage } from 'next/dist/server/app-render/work-async-storage.external.js';
 
 const dataDir = path.join(process.cwd(), 'data');
 
@@ -23,18 +24,6 @@ export interface Sermon {
   youtubeId: string;
   description: string;
   thumbnail: string;
-}
-
-export interface Post {
-  id: string;
-  title: string;
-  author: string;
-  date: string;
-  content: string;
-  likes: number;
-  comments: number;
-  category: string;
-  hidden?: boolean;
 }
 
 export interface User {
@@ -142,15 +131,6 @@ export function saveSermons(data: Sermon[]): void {
   writeJsonFile('sermons.json', data);
 }
 
-export function getPosts(options?: { includeHidden?: boolean }): Post[] {
-  const posts = readJsonFile<Post[]>('posts.json', []);
-  return options?.includeHidden ? posts : posts.filter(post => !post.hidden);
-}
-
-export function savePosts(data: Post[]): void {
-  writeJsonFile('posts.json', data);
-}
-
 export function getUsers(): User[] {
   return readJsonFile<User[]>('users.json', []);
 }
@@ -211,8 +191,20 @@ export interface TogetherPost {
   hidden?: boolean;
 }
 
-export function getTogetherPosts(): TogetherPost[] {
-  return readJsonFile<TogetherPost[]>('together.json', []);
+export interface TogetherPostsOptions {
+  includeHidden?: boolean;
+}
+
+function shouldIncludeHiddenTogetherPostsByDefault() {
+  const route = workAsyncStorage.getStore()?.route;
+  return typeof route === 'string' && route.startsWith('/admin');
+}
+
+export function getTogetherPosts(options?: TogetherPostsOptions): TogetherPost[] {
+  const posts = readJsonFile<TogetherPost[]>('together.json', []);
+  const includeHidden = options?.includeHidden ?? shouldIncludeHiddenTogetherPostsByDefault();
+
+  return includeHidden ? posts : posts.filter(post => !post.hidden);
 }
 
 export function saveTogetherPosts(data: TogetherPost[]): void {

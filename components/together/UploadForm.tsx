@@ -1,36 +1,154 @@
 'use client';
 
-import { useState, useRef, useTransition } from 'react';
-import { Camera, Upload, Image as ImageIcon, X, Loader2, AlertCircle } from 'lucide-react';
+import { useEffect, useRef, useState, useTransition } from 'react';
+import { Upload, X, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
 import { createTogetherPost } from '@/lib/actions';
 
+type SelectedImage = {
+  file: File;
+  previewUrl: string;
+  signature: string;
+};
+
+type SelectionIssues = {
+  invalidTypeCount: number;
+  emptyCount: number;
+  duplicateCount: number;
+};
+
+type RedirectLikeError = {
+  digest?: string;
+};
+
+const IMAGE_MIME_PREFIX = 'image/';
+
+function getFileSignature(file: Pick<File, 'name' | 'size' | 'lastModified'>) {
+  return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function formatSelectionIssues({
+  invalidTypeCount,
+  emptyCount,
+  duplicateCount,
+}: SelectionIssues) {
+  const messages: string[] = [];
+
+  if (invalidTypeCount > 0) {
+    messages.push(`이미지 파일이 아닌 항목 ${invalidTypeCount}개는 제외했어요.`);
+  }
+
+  if (emptyCount > 0) {
+    messages.push(`비어 있는 파일 ${emptyCount}개는 제외했어요.`);
+  }
+
+  if (duplicateCount > 0) {
+    messages.push(`이미 선택한 파일 ${duplicateCount}개는 중복으로 추가하지 않았어요.`);
+  }
+
+  return messages.length > 0 ? messages.join(' ') : null;
+}
+
+function isRedirectError(error: unknown): error is RedirectLikeError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'digest' in error &&
+    typeof error.digest === 'string' &&
+    error.digest.startsWith('NEXT_REDIRECT')
+  );
+}
+
+function getActionErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return '등록 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+}
+
 export default function UploadForm() {
-  const [images, setImages] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewUrlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    previewUrlsRef.current = selectedImages.map(image => image.previewUrl);
+  }, [selectedImages]);
+
+  useEffect(() => {
+    return () => {
+      previewUrlsRef.current.forEach(previewUrl => URL.revokeObjectURL(previewUrl));
+    };
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     addFiles(files);
+    e.target.value = '';
   };
 
   const addFiles = (files: File[]) => {
-    const validFiles = files.filter(file => file.type.startsWith('image/'));
-    
-    setImages(prev => [...prev, ...validFiles]);
-    
-    const newPreviews = validFiles.map(file => URL.createObjectURL(file));
-    setPreviews(prev => [...prev, ...newPreviews]);
+    if (files.length === 0) {
+      return;
+    }
+
+    const existingSignatures = new Set(selectedImages.map(image => image.signature));
+    const nextImages: SelectedImage[] = [];
+    const issues: SelectionIssues = {
+      invalidTypeCount: 0,
+      emptyCount: 0,
+      duplicateCount: 0,
+    };
+
+    files.forEach(file => {
+      if (!file.type.startsWith(IMAGE_MIME_PREFIX)) {
+        issues.invalidTypeCount += 1;
+        return;
+      }
+
+      if (file.size === 0) {
+        issues.emptyCount += 1;
+        return;
+      }
+
+      const signature = getFileSignature(file);
+
+      if (existingSignatures.has(signature)) {
+        issues.duplicateCount += 1;
+        return;
+      }
+
+      existingSignatures.add(signature);
+      nextImages.push({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        signature,
+      });
+    });
+
+    if (nextImages.length > 0) {
+      setSelectedImages(prev => [...prev, ...nextImages]);
+    }
+
+    setError(formatSelectionIssues(issues));
   };
 
   const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index));
-    URL.revokeObjectURL(previews[index]);
-    setPreviews(prev => prev.filter((_, i) => i !== index));
+    setSelectedImages(prev => {
+      const nextImages = [...prev];
+      const [removedImage] = nextImages.splice(index, 1);
+
+      if (removedImage) {
+        URL.revokeObjectURL(removedImage.previewUrl);
+      }
+
+      return nextImages;
+    });
+    setError(null);
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -53,23 +171,33 @@ export default function UploadForm() {
     e.preventDefault();
     setError(null);
 
-    if (images.length === 0) {
+    const formData = new FormData(e.currentTarget);
+    const title = formData.get('title');
+    const content = formData.get('content');
+
+    if (typeof title !== 'string' || !title.trim() || typeof content !== 'string' || !content.trim()) {
+      setError('제목과 내용을 입력하고 다시 등록해주세요.');
+      return;
+    }
+
+    if (selectedImages.length === 0) {
       setError('최소 한 장의 사진을 선택해주세요.');
       return;
     }
 
-    const formData = new FormData(e.currentTarget);
-    images.forEach(file => {
+    selectedImages.forEach(({ file }) => {
       formData.append('images', file);
     });
 
     startTransition(async () => {
       try {
         await createTogetherPost(formData);
-      } catch (err: any) {
-        // Don't catch Next.js redirect errors
-        if (err.message === 'NEXT_REDIRECT') throw err;
-        setError(err.message || '등록 중 오류가 발생했습니다.');
+      } catch (caughtError: unknown) {
+        if (isRedirectError(caughtError)) {
+          throw caughtError;
+        }
+
+        setError(getActionErrorMessage(caughtError));
       }
     });
   };
@@ -77,7 +205,10 @@ export default function UploadForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
       {error && (
-        <div className="flex items-center gap-3 rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-600 border border-red-100 animate-in fade-in slide-in-from-top-2">
+        <div
+          role="alert"
+          className="flex items-center gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-semibold text-red-600 animate-in fade-in slide-in-from-top-2"
+        >
           <AlertCircle size={18} />
           {error}
         </div>
@@ -126,8 +257,8 @@ export default function UploadForm() {
 
       <div className="space-y-4">
         <label className="text-sm font-bold text-[#1E1B4B]">사진 첨부</label>
-        
-        <div 
+
+        <div
           onClick={() => fileInputRef.current?.click()}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
@@ -156,11 +287,22 @@ export default function UploadForm() {
           </div>
         </div>
 
-        {previews.length > 0 && (
+        <p className="text-sm text-[#64748B]">
+          이미지 파일만 먼저 선별하며, 빈 파일과 중복 선택은 자동으로 제외됩니다. 최종 업로드 허용 여부는 서버 정책에서 한 번 더 확인됩니다.
+        </p>
+
+        {selectedImages.length > 0 && (
+          <div className="flex items-center justify-between text-sm font-semibold text-[#64748B]">
+            <span>{selectedImages.length}장의 사진이 선택되었습니다.</span>
+            <span>대표 이미지는 첫 번째 사진으로 사용됩니다.</span>
+          </div>
+        )}
+
+        {selectedImages.length > 0 && (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {previews.map((preview, index) => (
-              <div key={index} className="group relative aspect-square overflow-hidden rounded-2xl border border-[#EEE4D7]">
-                <Image src={preview} alt="미리보기" fill className="object-cover" />
+            {selectedImages.map((image, index) => (
+              <div key={image.signature} className="group relative aspect-square overflow-hidden rounded-2xl border border-[#EEE4D7]">
+                <Image src={image.previewUrl} alt={`${image.file.name} 미리보기`} fill className="object-cover" />
                 <button
                   type="button"
                   onClick={(e) => {

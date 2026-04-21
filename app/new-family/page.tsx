@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, HeartHandshake, ShieldCheck, Sparkles } from 'lucide-react';
 
-import PageHero from '@/components/PageHero';
-import { getChurchProfile } from '@/lib/data';
-import { newFamilyNotices, newFamilySteps, siteAssets } from '@/lib/site';
+import { getChurchProfile, getWorshipSchedule } from '@/lib/data';
+import { newFamilyNotices, newFamilySteps } from '@/lib/site';
 
 const flowSteps = [
   { step: 'STEP 1', title: '등록 절차 확인', description: '새가족 등록이 어떻게 진행되는지 먼저 안내를 확인합니다.' },
@@ -11,8 +10,26 @@ const flowSteps = [
   { step: 'STEP 3', title: '신청서 작성 및 제출', description: '기본 인적사항과 연락처를 입력하면 접수가 완료됩니다.' },
 ] as const;
 
+function getRecommendedVisitService() {
+  const worshipSchedule = getWorshipSchedule();
+  const sundaySection = worshipSchedule.find(section => section.day.includes('주일')) ?? worshipSchedule[0];
+
+  if (!sundaySection) {
+    return null;
+  }
+
+  return sundaySection.services.find(service => service.name.includes('2부')) ?? sundaySection.services[0] ?? null;
+}
+
 export default function NewFamilyPage() {
   const churchProfile = getChurchProfile();
+  const recommendedService = getRecommendedVisitService();
+  const visitGuide = recommendedService
+    ? `${recommendedService.name}는 ${recommendedService.time}에 시작합니다. 처음 오시는 분들도 현장에서 편하게 안내받으실 수 있도록 도와드립니다.`
+    : '주일 예배 시간은 예배 안내 페이지에서 최신 일정으로 확인하실 수 있습니다.';
+  const visitGuideMeta = recommendedService
+    ? [recommendedService.location, recommendedService.note].filter(Boolean).join(' · ')
+    : '';
 
   return (
     <main className="flex-1 pt-32 md:pt-40">
@@ -133,8 +150,13 @@ export default function NewFamilyPage() {
                 방문 안내
               </div>
               <p className="mt-4 text-sm leading-7" style={{ color: '#5F6570' }}>
-                주일 2부 예배는 오전 11시에 시작합니다. 처음 오시는 분들도 편하게 안내받을 수 있도록 현장에서 도와드립니다.
+                {visitGuide}
               </p>
+              {visitGuideMeta ? (
+                <p className="mt-4 inline-flex rounded-full px-3 py-1 text-xs font-medium" style={{ backgroundColor: '#F5EBDD', color: '#6E4A2F' }}>
+                  {visitGuideMeta}
+                </p>
+              ) : null}
               <p className="mt-4 text-sm font-semibold" style={{ color: '#1E1B4B' }}>
                 주소
               </p>

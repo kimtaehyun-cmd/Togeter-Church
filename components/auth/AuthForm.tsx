@@ -122,7 +122,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           </h1>
           <p className="mt-3 text-sm leading-7" style={{ color: '#64748B' }}>
             {isLogin
-              ? '로그인 후 교회 소식, 커뮤니티, 새가족 등록 등 필요한 메뉴를 더 편하게 이용할 수 있습니다.'
+              ? '로그인 후 교회 소식, 함께함 갤러리, 새가족 등록 등 필요한 메뉴를 더 편하게 이용할 수 있습니다.'
               : '계정을 만들면 교회 홈페이지의 주요 메뉴를 더 편하게 이용할 수 있습니다.'}
           </p>
         </div>

@@ -45,8 +45,8 @@ export default async function SignupPage() {
               className="mt-5 max-w-2xl text-sm leading-8 md:text-base"
               style={{ color: '#5F6570' }}
             >
-              계정을 만들면 교회 소식 확인, 커뮤니티 참여, 새가족 등록 등 홈페이지
-              주요 기능을 더 편하게 이용할 수 있습니다.
+              계정을 만들면 교회 소식 확인, 함께함 갤러리 이용, 새가족 등록 등
+              홈페이지 주요 기능을 더 편하게 이용할 수 있습니다.
             </p>
           </section>
 
