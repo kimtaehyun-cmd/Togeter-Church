@@ -1,10 +1,13 @@
 import { Play, PlusCircle, Save, Trash2, Video } from 'lucide-react';
 
 import AdminShell from '@/app/admin/_components/AdminShell';
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton';
 import { createSermon, deleteSermon, updateSermon } from '@/lib/actions';
+import { requireAdmin } from '@/lib/auth';
 import { getSermons, SERMON_CATEGORIES } from '@/lib/data';
 
-export default function AdminSermonsPage() {
+export default async function AdminSermonsPage() {
+  await requireAdmin('/admin/sermons');
   const sermons = getSermons();
 
   return (
@@ -266,14 +269,14 @@ export default function AdminSermonsPage() {
                   </form>
                   <div className="mt-3 flex justify-end">
                     <form action={deleteSermon.bind(null, sermon.id)}>
-                      <button
-                        type="submit"
+                      <ConfirmSubmitButton
+                        confirmMessage={`"${sermon.title}" 설교 영상을 삭제할까요? 복구할 수 없습니다.`}
                         className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
                         style={{ borderColor: '#FECACA', color: '#B91C1C', backgroundColor: '#FEF2F2' }}
                       >
                         <Trash2 size={15} />
                         삭제
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </div>

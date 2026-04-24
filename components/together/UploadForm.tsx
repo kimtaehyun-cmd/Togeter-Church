@@ -3,7 +3,14 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { Upload, X, Loader2, AlertCircle } from 'lucide-react';
 import Image from 'next/image';
+
 import { createTogetherPost } from '@/lib/actions';
+import {
+  TOGETHER_MAX_IMAGE_COUNT,
+  TOGETHER_MAX_IMAGE_SIZE_BYTES,
+  TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES,
+  formatUploadFileSize,
+} from '@/lib/together-upload-policy';
 
 type SelectedImage = {
   file: File;
@@ -15,6 +22,9 @@ type SelectionIssues = {
   invalidTypeCount: number;
   emptyCount: number;
   duplicateCount: number;
+  overCountCount: number;
+  oversizedCount: number;
+  overTotalCount: number;
 };
 
 type RedirectLikeError = {
@@ -31,6 +41,9 @@ function formatSelectionIssues({
   invalidTypeCount,
   emptyCount,
   duplicateCount,
+  overCountCount,
+  oversizedCount,
+  overTotalCount,
 }: SelectionIssues) {
   const messages: string[] = [];
 
@@ -44,6 +57,22 @@ function formatSelectionIssues({
 
   if (duplicateCount > 0) {
     messages.push(`이미 선택한 파일 ${duplicateCount}개는 중복으로 추가하지 않았어요.`);
+  }
+
+  if (overCountCount > 0) {
+    messages.push(`사진은 최대 ${TOGETHER_MAX_IMAGE_COUNT}장까지 선택할 수 있어요. 초과한 ${overCountCount}개는 제외했어요.`);
+  }
+
+  if (oversizedCount > 0) {
+    messages.push(
+      `${formatUploadFileSize(TOGETHER_MAX_IMAGE_SIZE_BYTES)}를 넘는 사진 ${oversizedCount}개는 제외했어요.`,
+    );
+  }
+
+  if (overTotalCount > 0) {
+    messages.push(
+      `전체 업로드 한도 ${formatUploadFileSize(TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES)}를 넘는 사진 ${overTotalCount}개는 제외했어요.`,
+    );
   }
 
   return messages.length > 0 ? messages.join(' ') : null;
@@ -65,6 +94,36 @@ function getActionErrorMessage(error: unknown) {
   }
 
   return '등록 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+}
+
+function getSelectedImagesValidationError(images: SelectedImage[]) {
+  if (images.length === 0) {
+    return '최소 한 장의 사진을 선택해주세요.';
+  }
+
+  if (images.length > TOGETHER_MAX_IMAGE_COUNT) {
+    return `사진은 최대 ${TOGETHER_MAX_IMAGE_COUNT}장까지 등록할 수 있어요.`;
+  }
+
+  let totalSize = 0;
+
+  for (const image of images) {
+    if (image.file.size <= 0) {
+      return '비어 있는 파일은 업로드할 수 없어요.';
+    }
+
+    if (image.file.size > TOGETHER_MAX_IMAGE_SIZE_BYTES) {
+      return `각 사진은 ${formatUploadFileSize(TOGETHER_MAX_IMAGE_SIZE_BYTES)} 이하만 등록할 수 있어요.`;
+    }
+
+    totalSize += image.file.size;
+
+    if (totalSize > TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES) {
+      return `전체 사진 용량은 ${formatUploadFileSize(TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES)}를 넘을 수 없어요.`;
+    }
+  }
+
+  return null;
 }
 
 export default function UploadForm() {
@@ -97,11 +156,16 @@ export default function UploadForm() {
     }
 
     const existingSignatures = new Set(selectedImages.map(image => image.signature));
+    const currentTotalSize = selectedImages.reduce((total, image) => total + image.file.size, 0);
     const nextImages: SelectedImage[] = [];
+    let nextTotalSize = 0;
     const issues: SelectionIssues = {
       invalidTypeCount: 0,
       emptyCount: 0,
       duplicateCount: 0,
+      overCountCount: 0,
+      oversizedCount: 0,
+      overTotalCount: 0,
     };
 
     files.forEach(file => {
@@ -122,7 +186,23 @@ export default function UploadForm() {
         return;
       }
 
+      if (selectedImages.length + nextImages.length >= TOGETHER_MAX_IMAGE_COUNT) {
+        issues.overCountCount += 1;
+        return;
+      }
+
+      if (file.size > TOGETHER_MAX_IMAGE_SIZE_BYTES) {
+        issues.oversizedCount += 1;
+        return;
+      }
+
+      if (currentTotalSize + nextTotalSize + file.size > TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES) {
+        issues.overTotalCount += 1;
+        return;
+      }
+
       existingSignatures.add(signature);
+      nextTotalSize += file.size;
       nextImages.push({
         file,
         previewUrl: URL.createObjectURL(file),
@@ -182,6 +262,13 @@ export default function UploadForm() {
 
     if (selectedImages.length === 0) {
       setError('최소 한 장의 사진을 선택해주세요.');
+      return;
+    }
+
+    const selectionError = getSelectedImagesValidationError(selectedImages);
+
+    if (selectionError) {
+      setError(selectionError);
       return;
     }
 
@@ -288,7 +375,7 @@ export default function UploadForm() {
         </div>
 
         <p className="text-sm text-[#64748B]">
-          이미지 파일만 먼저 선별하며, 빈 파일과 중복 선택은 자동으로 제외됩니다. 최종 업로드 허용 여부는 서버 정책에서 한 번 더 확인됩니다.
+          이미지 파일만 먼저 선별하며, 빈 파일과 중복 선택은 자동으로 제외됩니다. 사진은 최대 {TOGETHER_MAX_IMAGE_COUNT}장까지, 각 파일은 {formatUploadFileSize(TOGETHER_MAX_IMAGE_SIZE_BYTES)} 이하, 전체는 {formatUploadFileSize(TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES)} 이하로 등록할 수 있습니다.
         </p>
 
         {selectedImages.length > 0 && (

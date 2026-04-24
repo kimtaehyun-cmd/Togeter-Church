@@ -1,10 +1,13 @@
 import { Bell, Pin, PlusCircle, Save, Trash2 } from 'lucide-react';
 
 import AdminShell from '@/app/admin/_components/AdminShell';
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton';
 import { createAnnouncement, deleteAnnouncement, updateAnnouncement } from '@/lib/actions';
+import { requireAdmin } from '@/lib/auth';
 import { getAnnouncements } from '@/lib/data';
 
-export default function AdminAnnouncementsPage() {
+export default async function AdminAnnouncementsPage() {
+  await requireAdmin('/admin/announcements');
   const announcements = getAnnouncements();
 
   return (
@@ -195,14 +198,14 @@ export default function AdminAnnouncementsPage() {
                   </form>
                   <div className="mt-3 flex justify-end">
                     <form action={deleteAnnouncement.bind(null, item.id)}>
-                      <button
-                        type="submit"
+                      <ConfirmSubmitButton
+                        confirmMessage={`"${item.title}" 공지사항을 삭제할까요? 복구할 수 없습니다.`}
                         className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
                         style={{ borderColor: '#FECACA', color: '#B91C1C', backgroundColor: '#FEF2F2' }}
                       >
                         <Trash2 size={15} />
                         삭제
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </div>

@@ -7,7 +7,10 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { aboutSections } from '@/components/about/aboutSections';
+import { logAdminActivity } from '@/lib/admin-activity';
 import { requireAdmin, requireUser } from '@/lib/auth';
+import { normalizeSafeHref, normalizeSafeMapUrl } from '@/lib/safe-url';
+import { getAllowedSliderImagePath } from '@/lib/slider-images';
 import {
   type Announcement,
   type ChurchProfile,
@@ -32,6 +35,19 @@ import {
   saveNewFamilyRegistrations,
   type TogetherPost,
 } from '@/lib/data';
+import {
+  TOGETHER_MAX_IMAGE_COUNT,
+  TOGETHER_MAX_IMAGE_SIZE_BYTES,
+  TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES,
+  formatUploadFileSize,
+} from '@/lib/together-upload-policy';
+import {
+  ensurePathInsideDirectory,
+  getUploadsRootDir,
+  resolvePublicUploadPath,
+  toPublicUploadUrl,
+} from '@/lib/upload-storage';
+import { canUploadTogether } from '@/lib/user-permissions';
 
 const PUBLIC_PATHS = [
   '/',
@@ -44,6 +60,7 @@ const PUBLIC_PATHS = [
 
 const ADMIN_PATHS = [
   '/admin',
+  '/admin/access',
   '/admin/announcements',
   '/admin/sermons',
   '/admin/slider',
@@ -53,16 +70,11 @@ const ADMIN_PATHS = [
   '/admin/new-family',
 ];
 
-const PUBLIC_UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+const PUBLIC_UPLOADS_DIR = getUploadsRootDir();
 const TOGETHER_UPLOADS_DIR = path.join(PUBLIC_UPLOADS_DIR, 'together');
-const TOGETHER_MAX_IMAGE_COUNT = 10;
-const TOGETHER_MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
-const TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES = 30 * 1024 * 1024;
+const TOGETHER_IMAGE_SIGNATURE_MAX_BYTES = 12;
 
-type TogetherPreparedImage = {
-  buffer: Buffer;
-  extension: 'jpg' | 'png' | 'webp' | 'gif';
-};
+type TogetherImageExtension = 'jpg' | 'png' | 'webp' | 'gif';
 
 function normalizeText(value: FormDataEntryValue | null): string {
   return String(value ?? '').trim();
@@ -148,34 +160,6 @@ function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function formatFileSize(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  const precision = unitIndex === 0 ? 0 : 1;
-  return `${value.toFixed(precision)}${units[unitIndex]}`;
-}
-
-function ensurePathInsideDirectory(rootDir: string, targetPath: string) {
-  const normalizedRoot = path.resolve(rootDir);
-  const normalizedTarget = path.resolve(targetPath);
-
-  if (
-    normalizedTarget !== normalizedRoot &&
-    !normalizedTarget.startsWith(`${normalizedRoot}${path.sep}`)
-  ) {
-    throw new Error('안전하지 않은 파일 경로가 감지되었습니다.');
-  }
-
-  return normalizedTarget;
-}
-
 function isJpeg(buffer: Buffer) {
   return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
 }
@@ -211,7 +195,7 @@ function isWebp(buffer: Buffer) {
   );
 }
 
-function detectTogetherImageExtension(buffer: Buffer): TogetherPreparedImage['extension'] | null {
+function detectTogetherImageExtension(buffer: Buffer): TogetherImageExtension | null {
   if (isJpeg(buffer)) {
     return 'jpg';
   }
@@ -231,7 +215,7 @@ function detectTogetherImageExtension(buffer: Buffer): TogetherPreparedImage['ex
   return null;
 }
 
-async function prepareTogetherImages(files: File[]): Promise<TogetherPreparedImage[]> {
+function validateTogetherImageSelection(files: File[]) {
   if (files.length === 0) {
     throw new Error('최소 한 장의 사진을 등록해주세요.');
   }
@@ -241,7 +225,6 @@ async function prepareTogetherImages(files: File[]): Promise<TogetherPreparedIma
   }
 
   let totalSize = 0;
-  const preparedImages: TogetherPreparedImage[] = [];
 
   for (const file of files) {
     if (file.size <= 0) {
@@ -250,7 +233,7 @@ async function prepareTogetherImages(files: File[]): Promise<TogetherPreparedIma
 
     if (file.size > TOGETHER_MAX_IMAGE_SIZE_BYTES) {
       throw new Error(
-        `각 사진은 ${formatFileSize(TOGETHER_MAX_IMAGE_SIZE_BYTES)} 이하만 업로드할 수 있습니다.`,
+        `각 사진은 ${formatUploadFileSize(TOGETHER_MAX_IMAGE_SIZE_BYTES)} 이하만 업로드할 수 있습니다.`,
       );
     }
 
@@ -258,56 +241,109 @@ async function prepareTogetherImages(files: File[]): Promise<TogetherPreparedIma
 
     if (totalSize > TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES) {
       throw new Error(
-        `전체 사진 용량은 ${formatFileSize(TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES)}를 넘을 수 없습니다.`,
+        `전체 사진 용량은 ${formatUploadFileSize(TOGETHER_MAX_TOTAL_IMAGE_SIZE_BYTES)}를 넘을 수 없습니다.`,
       );
     }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const extension = detectTogetherImageExtension(buffer);
-
-    if (!extension) {
-      throw new Error('JPG, PNG, WEBP, GIF 형식의 이미지 파일만 업로드할 수 있습니다.');
-    }
-
-    preparedImages.push({ buffer, extension });
   }
-
-  return preparedImages;
 }
 
 function getTogetherPostUploadDir(postId: string) {
   return ensurePathInsideDirectory(TOGETHER_UPLOADS_DIR, path.join(TOGETHER_UPLOADS_DIR, postId));
 }
 
-function buildTogetherImageFileName(index: number, extension: TogetherPreparedImage['extension']) {
+function buildTogetherImageFileName(index: number, extension: TogetherImageExtension) {
   return `${String(index + 1).padStart(2, '0')}-${randomUUID()}.${extension}`;
 }
 
-function toPublicUploadUrl(filePath: string) {
-  const publicDir = path.join(process.cwd(), 'public');
-  const normalizedFilePath = ensurePathInsideDirectory(publicDir, filePath);
-  const relativePath = path.relative(publicDir, normalizedFilePath);
-
-  if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    throw new Error('공개 업로드 경로를 생성할 수 없습니다.');
-  }
-
-  return `/${relativePath.split(path.sep).join('/')}`;
+function buildTogetherTempFilePath(uploadDir: string, index: number) {
+  return ensurePathInsideDirectory(
+    uploadDir,
+    path.join(uploadDir, `.${String(index + 1).padStart(2, '0')}-${randomUUID()}.tmp`),
+  );
 }
 
-async function saveTogetherImages(postId: string, images: TogetherPreparedImage[]) {
+async function streamTogetherImageToTempFile(file: File, tempFilePath: string) {
+  const reader = file.stream().getReader();
+  const fileHandle = await fs.open(tempFilePath, 'w');
+  let bytesWritten = 0;
+  let signatureBytes = Buffer.alloc(0);
+  let extension: TogetherImageExtension | null = null;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      const chunk = Buffer.from(value);
+      bytesWritten += chunk.length;
+
+      if (bytesWritten > TOGETHER_MAX_IMAGE_SIZE_BYTES) {
+        throw new Error(
+          `각 사진은 ${formatUploadFileSize(TOGETHER_MAX_IMAGE_SIZE_BYTES)} 이하만 업로드할 수 있습니다.`,
+        );
+      }
+
+      if (signatureBytes.length < TOGETHER_IMAGE_SIGNATURE_MAX_BYTES) {
+        const remainingBytes = TOGETHER_IMAGE_SIGNATURE_MAX_BYTES - signatureBytes.length;
+        const nextSignatureChunk = chunk.subarray(0, remainingBytes);
+        signatureBytes = Buffer.concat([signatureBytes, nextSignatureChunk]);
+        extension ??= detectTogetherImageExtension(signatureBytes);
+
+        if (!extension && signatureBytes.length >= TOGETHER_IMAGE_SIGNATURE_MAX_BYTES) {
+          throw new Error('JPG, PNG, WEBP, GIF 형식의 이미지 파일만 업로드할 수 있습니다.');
+        }
+      }
+
+      await fileHandle.write(chunk);
+    }
+
+    if (bytesWritten <= 0) {
+      throw new Error('비어 있는 파일은 업로드할 수 없습니다.');
+    }
+
+    extension ??= detectTogetherImageExtension(signatureBytes);
+
+    if (!extension) {
+      throw new Error('JPG, PNG, WEBP, GIF 형식의 이미지 파일만 업로드할 수 있습니다.');
+    }
+
+    return extension;
+  } finally {
+    await fileHandle.close();
+    reader.releaseLock();
+  }
+}
+
+async function saveTogetherImages(postId: string, files: File[]) {
   const uploadDir = getTogetherPostUploadDir(postId);
   const imageUrls: string[] = [];
 
+  validateTogetherImageSelection(files);
   await fs.mkdir(uploadDir, { recursive: true });
 
   try {
-    for (const [index, image] of images.entries()) {
-      const fileName = buildTogetherImageFileName(index, image.extension);
-      const filePath = ensurePathInsideDirectory(uploadDir, path.join(uploadDir, fileName));
+    for (const [index, file] of files.entries()) {
+      const tempFilePath = buildTogetherTempFilePath(uploadDir, index);
+      let finalFilePath: string | null = null;
 
-      await fs.writeFile(filePath, image.buffer);
-      imageUrls.push(toPublicUploadUrl(filePath));
+      try {
+        const extension = await streamTogetherImageToTempFile(file, tempFilePath);
+        const fileName = buildTogetherImageFileName(index, extension);
+        finalFilePath = ensurePathInsideDirectory(uploadDir, path.join(uploadDir, fileName));
+        await fs.rename(tempFilePath, finalFilePath);
+      } catch (error) {
+        await fs.rm(tempFilePath, { force: true });
+        throw error;
+      }
+
+      if (!finalFilePath) {
+        throw new Error('업로드 파일 경로를 생성할 수 없습니다.');
+      }
+
+      imageUrls.push(toPublicUploadUrl(finalFilePath));
     }
   } catch (error) {
     await fs.rm(uploadDir, { recursive: true, force: true });
@@ -318,15 +354,7 @@ async function saveTogetherImages(postId: string, images: TogetherPreparedImage[
 }
 
 function resolveLocalUploadPath(uploadUrl: string) {
-  if (!uploadUrl.startsWith('/uploads/')) {
-    return null;
-  }
-
-  const pathname = uploadUrl.split('?')[0];
-  const relativeSegments = pathname.replace(/^\/+/, '').split('/').filter(Boolean);
-  const targetPath = path.join(process.cwd(), 'public', ...relativeSegments);
-
-  return ensurePathInsideDirectory(PUBLIC_UPLOADS_DIR, targetPath);
+  return resolvePublicUploadPath(uploadUrl);
 }
 
 async function cleanupTogetherPostFiles(post: TogetherPost) {
@@ -353,7 +381,7 @@ async function cleanupTogetherPostFiles(post: TogetherPost) {
 }
 
 export async function createAnnouncement(formData: FormData) {
-  await requireAdmin('/admin/announcements');
+  const admin = await requireAdmin('/admin/announcements');
   const title = normalizeText(formData.get('title'));
   const category = normalizeText(formData.get('category'));
   const content = normalizeTextarea(formData.get('content'));
@@ -373,13 +401,21 @@ export async function createAnnouncement(formData: FormData) {
   };
 
   saveAnnouncements(toAnnouncementList([newItem, ...announcements]));
+  logAdminActivity({
+    actor: admin,
+    action: 'announcement.create',
+    summary: `공지사항 "${newItem.title}"을 등록했습니다.`,
+    targetType: 'announcement',
+    targetId: newItem.id,
+  });
   revalidatePublicSite();
   revalidateAdmin(['/admin/announcements']);
 }
 
 export async function updateAnnouncement(id: string, formData: FormData) {
-  await requireAdmin('/admin/announcements');
+  const admin = await requireAdmin('/admin/announcements');
   const announcements = getAnnouncements();
+  const currentAnnouncement = announcements.find(item => item.id === id);
 
   saveAnnouncements(
     toAnnouncementList(
@@ -397,19 +433,42 @@ export async function updateAnnouncement(id: string, formData: FormData) {
     ),
   );
 
+  if (currentAnnouncement) {
+    logAdminActivity({
+      actor: admin,
+      action: 'announcement.update',
+      summary: `공지사항 "${currentAnnouncement.title}"을 수정했습니다.`,
+      targetType: 'announcement',
+      targetId: currentAnnouncement.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/announcements']);
 }
 
 export async function deleteAnnouncement(id: string) {
-  await requireAdmin('/admin/announcements');
-  saveAnnouncements(getAnnouncements().filter(item => item.id !== id));
+  const admin = await requireAdmin('/admin/announcements');
+  const announcements = getAnnouncements();
+  const target = announcements.find(item => item.id === id);
+  saveAnnouncements(announcements.filter(item => item.id !== id));
+
+  if (target) {
+    logAdminActivity({
+      actor: admin,
+      action: 'announcement.delete',
+      summary: `공지사항 "${target.title}"을 삭제했습니다.`,
+      targetType: 'announcement',
+      targetId: target.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/announcements']);
 }
 
 export async function createSermon(formData: FormData) {
-  await requireAdmin('/admin/sermons');
+  const admin = await requireAdmin('/admin/sermons');
   const title = normalizeText(formData.get('title'));
   const preacher = normalizeText(formData.get('preacher'));
   const description = normalizeTextarea(formData.get('description'));
@@ -433,14 +492,22 @@ export async function createSermon(formData: FormData) {
   saveSermons(
     [sermon, ...sermons].sort((left, right) => right.date.localeCompare(left.date)),
   );
+  logAdminActivity({
+    actor: admin,
+    action: 'sermon.create',
+    summary: `설교 "${sermon.title}"을 등록했습니다.`,
+    targetType: 'sermon',
+    targetId: sermon.id,
+  });
 
   revalidatePublicSite();
   revalidateAdmin(['/admin/sermons']);
 }
 
 export async function updateSermon(id: string, formData: FormData) {
-  await requireAdmin('/admin/sermons');
+  const admin = await requireAdmin('/admin/sermons');
   const sermons = getSermons();
+  const currentSermon = sermons.find(item => item.id === id);
 
   saveSermons(
     sermons
@@ -461,19 +528,42 @@ export async function updateSermon(id: string, formData: FormData) {
       .sort((left, right) => right.date.localeCompare(left.date)),
   );
 
+  if (currentSermon) {
+    logAdminActivity({
+      actor: admin,
+      action: 'sermon.update',
+      summary: `설교 "${currentSermon.title}"을 수정했습니다.`,
+      targetType: 'sermon',
+      targetId: currentSermon.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/sermons']);
 }
 
 export async function deleteSermon(id: string) {
-  await requireAdmin('/admin/sermons');
-  saveSermons(getSermons().filter(item => item.id !== id));
+  const admin = await requireAdmin('/admin/sermons');
+  const sermons = getSermons();
+  const target = sermons.find(item => item.id === id);
+  saveSermons(sermons.filter(item => item.id !== id));
+
+  if (target) {
+    logAdminActivity({
+      actor: admin,
+      action: 'sermon.delete',
+      summary: `설교 "${target.title}"을 삭제했습니다.`,
+      targetType: 'sermon',
+      targetId: target.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/sermons']);
 }
 
 export async function createSliderItem(formData: FormData) {
-  await requireAdmin('/admin/slider');
+  const admin = await requireAdmin('/admin/slider');
   const sliderItems = getSliderItems();
 
   const nextItem: SliderItem = {
@@ -482,11 +572,11 @@ export async function createSliderItem(formData: FormData) {
     title: normalizeTextarea(formData.get('title')),
     description: normalizeTextarea(formData.get('description')),
     accent: normalizeText(formData.get('accent')) || '#F6EBDC',
-    imagePath: normalizeText(formData.get('imagePath')) || '/image/church-background.png',
+    imagePath: getAllowedSliderImagePath(normalizeText(formData.get('imagePath'))),
     primaryLabel: normalizeText(formData.get('primaryLabel')) || '자세히 보기',
-    primaryHref: normalizeText(formData.get('primaryHref')) || '/about/church-guide',
+    primaryHref: normalizeSafeHref(formData.get('primaryHref'), '/about/church-guide'),
     secondaryLabel: normalizeText(formData.get('secondaryLabel')) || '오시는 길',
-    secondaryHref: normalizeText(formData.get('secondaryHref')) || '/about/directions',
+    secondaryHref: normalizeSafeHref(formData.get('secondaryHref'), '/about/directions'),
     order: toNumber(formData.get('order'), sliderItems.length + 1),
     active: toBoolean(formData.get('active')),
   };
@@ -496,12 +586,20 @@ export async function createSliderItem(formData: FormData) {
   }
 
   saveSliderItems([...sliderItems, nextItem]);
+  logAdminActivity({
+    actor: admin,
+    action: 'slider.create',
+    summary: `메인 슬라이드 "${nextItem.title}"을 추가했습니다.`,
+    targetType: 'slider',
+    targetId: nextItem.id,
+  });
   revalidatePublicSite();
   revalidateAdmin(['/admin/slider']);
 }
 
 export async function updateSliderItem(id: string, formData: FormData) {
-  await requireAdmin('/admin/slider');
+  const admin = await requireAdmin('/admin/slider');
+  const currentItem = getSliderItems().find(item => item.id === id);
   saveSliderItems(
     getSliderItems().map(item =>
       item.id === id
@@ -511,12 +609,14 @@ export async function updateSliderItem(id: string, formData: FormData) {
             title: normalizeTextarea(formData.get('title')) || item.title,
             description: normalizeTextarea(formData.get('description')) || item.description,
             accent: normalizeText(formData.get('accent')) || item.accent,
-            imagePath: normalizeText(formData.get('imagePath')) || item.imagePath,
+            imagePath: getAllowedSliderImagePath(
+              normalizeText(formData.get('imagePath')) || item.imagePath,
+            ),
             primaryLabel: normalizeText(formData.get('primaryLabel')) || item.primaryLabel,
-            primaryHref: normalizeText(formData.get('primaryHref')) || item.primaryHref,
+            primaryHref: normalizeSafeHref(formData.get('primaryHref'), item.primaryHref),
             secondaryLabel:
               normalizeText(formData.get('secondaryLabel')) || item.secondaryLabel,
-            secondaryHref: normalizeText(formData.get('secondaryHref')) || item.secondaryHref,
+            secondaryHref: normalizeSafeHref(formData.get('secondaryHref'), item.secondaryHref),
             order: toNumber(formData.get('order'), item.order),
             active: toBoolean(formData.get('active')),
           }
@@ -524,19 +624,42 @@ export async function updateSliderItem(id: string, formData: FormData) {
     ),
   );
 
+  if (currentItem) {
+    logAdminActivity({
+      actor: admin,
+      action: 'slider.update',
+      summary: `메인 슬라이드 "${currentItem.title}"을 수정했습니다.`,
+      targetType: 'slider',
+      targetId: currentItem.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/slider']);
 }
 
 export async function deleteSliderItem(id: string) {
-  await requireAdmin('/admin/slider');
-  saveSliderItems(getSliderItems().filter(item => item.id !== id));
+  const admin = await requireAdmin('/admin/slider');
+  const sliderItems = getSliderItems();
+  const target = sliderItems.find(item => item.id === id);
+  saveSliderItems(sliderItems.filter(item => item.id !== id));
+
+  if (target) {
+    logAdminActivity({
+      actor: admin,
+      action: 'slider.delete',
+      summary: `메인 슬라이드 "${target.title}"을 삭제했습니다.`,
+      targetType: 'slider',
+      targetId: target.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/slider']);
 }
 
 export async function updateChurchProfile(formData: FormData) {
-  await requireAdmin('/admin/church');
+  const admin = await requireAdmin('/admin/church');
   const current = getChurchProfile();
   const nextProfile: ChurchProfile = {
     churchName: normalizeText(formData.get('churchName')) || current.churchName,
@@ -549,18 +672,27 @@ export async function updateChurchProfile(formData: FormData) {
     address: normalizeTextarea(formData.get('address')) || current.address,
     phone: normalizeText(formData.get('phone')) || current.phone,
     email: normalizeText(formData.get('email')) || current.email,
-    mapEmbedUrl: normalizeTextarea(formData.get('mapEmbedUrl')) || current.mapEmbedUrl,
-    mapDirectionsUrl:
-      normalizeTextarea(formData.get('mapDirectionsUrl')) || current.mapDirectionsUrl,
+    mapEmbedUrl: normalizeSafeMapUrl(formData.get('mapEmbedUrl'), current.mapEmbedUrl),
+    mapDirectionsUrl: normalizeSafeMapUrl(
+      formData.get('mapDirectionsUrl'),
+      current.mapDirectionsUrl,
+    ),
   };
 
   saveChurchProfile(nextProfile);
+  logAdminActivity({
+    actor: admin,
+    action: 'church.update',
+    summary: '교회 소개 정보를 수정했습니다.',
+    targetType: 'church-profile',
+    targetId: nextProfile.churchName,
+  });
   revalidatePublicSite();
   revalidateAdmin(['/admin/church']);
 }
 
 export async function updateWorshipSchedule(formData: FormData) {
-  await requireAdmin('/admin/worship');
+  const admin = await requireAdmin('/admin/worship');
   const sectionIds = formData.getAll('sectionId').map(value => normalizeText(value));
   const sectionDays = formData.getAll('sectionDay').map(value => normalizeText(value));
   const sectionDescriptions = formData
@@ -621,6 +753,13 @@ export async function updateWorshipSchedule(formData: FormData) {
   }));
 
   saveWorshipSchedule(nextSchedule);
+  logAdminActivity({
+    actor: admin,
+    action: 'worship.bulk-update',
+    summary: '예배 시간표 전체 구성을 수정했습니다.',
+    targetType: 'worship-schedule',
+    targetId: 'bulk',
+  });
   revalidatePublicSite();
   revalidateAdmin(['/admin/worship']);
 }
@@ -647,7 +786,7 @@ function parseServicesTextarea(value: FormDataEntryValue | null): WorshipService
 }
 
 export async function createWorshipSection(formData: FormData) {
-  await requireAdmin('/admin/worship');
+  const admin = await requireAdmin('/admin/worship');
   const day = normalizeText(formData.get('day'));
   const description = normalizeTextarea(formData.get('description'));
   const services = parseServicesTextarea(formData.get('services'));
@@ -665,13 +804,21 @@ export async function createWorshipSection(formData: FormData) {
   };
 
   saveWorshipSchedule([...schedule, nextSection]);
+  logAdminActivity({
+    actor: admin,
+    action: 'worship.section.create',
+    summary: `예배 섹션 "${nextSection.day}"을 추가했습니다.`,
+    targetType: 'worship-section',
+    targetId: nextSection.id,
+  });
   revalidatePublicSite();
   revalidateAdmin(['/admin/worship']);
 }
 
 export async function updateWorshipSection(id: string, formData: FormData) {
-  await requireAdmin('/admin/worship');
+  const admin = await requireAdmin('/admin/worship');
   const schedule = getWorshipSchedule();
+  const currentSection = schedule.find(section => section.id === id);
 
   saveWorshipSchedule(
     schedule.map(section =>
@@ -687,19 +834,47 @@ export async function updateWorshipSection(id: string, formData: FormData) {
     ),
   );
 
+  if (currentSection) {
+    logAdminActivity({
+      actor: admin,
+      action: 'worship.section.update',
+      summary: `예배 섹션 "${currentSection.day}"을 수정했습니다.`,
+      targetType: 'worship-section',
+      targetId: currentSection.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/worship']);
 }
 
 export async function deleteWorshipSection(id: string) {
-  await requireAdmin('/admin/worship');
-  saveWorshipSchedule(getWorshipSchedule().filter(section => section.id !== id));
+  const admin = await requireAdmin('/admin/worship');
+  const schedule = getWorshipSchedule();
+  const target = schedule.find(section => section.id === id);
+  saveWorshipSchedule(schedule.filter(section => section.id !== id));
+
+  if (target) {
+    logAdminActivity({
+      actor: admin,
+      action: 'worship.section.delete',
+      summary: `예배 섹션 "${target.day}"을 삭제했습니다.`,
+      targetType: 'worship-section',
+      targetId: target.id,
+    });
+  }
+
   revalidatePublicSite();
   revalidateAdmin(['/admin/worship']);
 }
 
 export async function createTogetherPost(formData: FormData) {
   const user = await requireUser('/together/upload');
+
+  if (!canUploadTogether(user)) {
+    throw new Error('함께함 글 등록 권한이 없습니다. 관리자에게 권한을 요청해 주세요.');
+  }
+
   const title = normalizeText(formData.get('title'));
   const content = normalizeTextarea(formData.get('content'));
   const authorInput = normalizeText(formData.get('author'));
@@ -711,9 +886,8 @@ export async function createTogetherPost(formData: FormData) {
   const files = formData
     .getAll('images')
     .filter((entry): entry is File => entry instanceof File);
-  const preparedImages = await prepareTogetherImages(files);
   const postId = createId('together');
-  const imageUrls = await saveTogetherImages(postId, preparedImages);
+  const imageUrls = await saveTogetherImages(postId, files);
   const posts = getTogetherPosts({ includeHidden: true });
   const newPost: TogetherPost = {
     id: postId,
@@ -740,17 +914,24 @@ export async function createTogetherPost(formData: FormData) {
 }
 
 export async function deleteTogetherPost(id: string) {
-  await requireAdmin('/admin/together');
+  const admin = await requireAdmin('/admin/together');
   const posts = getTogetherPosts({ includeHidden: true });
   const targetPost = posts.find(post => post.id === id);
 
   if (!targetPost) {
     revalidatePublicSite();
     revalidateAdmin(['/admin/together']);
-    return;
+    redirect('/admin/together?status=warning&message=%EC%9D%B4%EB%AF%B8%20%EC%82%AD%EC%A0%9C%EB%90%98%EC%97%88%EA%B1%B0%EB%82%98%20%EC%A1%B4%EC%9E%AC%ED%95%98%EC%A7%80%20%EC%95%8A%EB%8A%94%20%EA%B2%8C%EC%8B%9C%EA%B8%80%EC%9E%85%EB%8B%88%EB%8B%A4.');
   }
 
   saveTogetherPosts(posts.filter(post => post.id !== id));
+  logAdminActivity({
+    actor: admin,
+    action: 'together.delete',
+    summary: `함께함 게시글 "${targetPost.title}"을 삭제했습니다.`,
+    targetType: 'together-post',
+    targetId: targetPost.id,
+  });
 
   try {
     await cleanupTogetherPostFiles(targetPost);
@@ -759,25 +940,63 @@ export async function deleteTogetherPost(id: string) {
       postId: targetPost.id,
       error,
     });
+
+    revalidatePublicSite();
+    revalidateAdmin(['/admin/together']);
+    redirect(
+      `/admin/together?status=warning&message=${encodeURIComponent(
+        `"${targetPost.title}" 게시글은 삭제했지만 일부 파일 정리에 실패했습니다. 서버 업로드 폴더를 확인해 주세요.`,
+      )}`,
+    );
+  }
+
+  revalidatePublicSite();
+  revalidateAdmin(['/admin/together']);
+  redirect(
+    `/admin/together?status=success&message=${encodeURIComponent(
+      `"${targetPost.title}" 게시글을 삭제했습니다.`,
+    )}`,
+  );
+}
+
+export async function toggleTogetherVisibility(id: string) {
+  const admin = await requireAdmin('/admin/together');
+  const posts = getTogetherPosts({ includeHidden: true });
+  const targetPost = posts.find(post => post.id === id);
+  const nextHidden = targetPost ? !targetPost.hidden : false;
+  saveTogetherPosts(
+    posts.map(post => (post.id === id ? { ...post, hidden: !post.hidden } : post)),
+  );
+
+  if (targetPost) {
+    logAdminActivity({
+      actor: admin,
+      action: 'together.visibility.toggle',
+      summary: `함께함 게시글 "${targetPost.title}"을 ${nextHidden ? '숨김' : '공개'} 처리했습니다.`,
+      targetType: 'together-post',
+      targetId: targetPost.id,
+    });
   }
 
   revalidatePublicSite();
   revalidateAdmin(['/admin/together']);
 }
 
-export async function toggleTogetherVisibility(id: string) {
-  await requireAdmin('/admin/together');
-  const posts = getTogetherPosts({ includeHidden: true });
-  saveTogetherPosts(
-    posts.map(post => (post.id === id ? { ...post, hidden: !post.hidden } : post)),
-  );
-  revalidatePublicSite();
-  revalidateAdmin(['/admin/together']);
-}
-
 export async function deleteNewFamilyRegistration(id: string) {
-  await requireAdmin('/admin/new-family');
+  const admin = await requireAdmin('/admin/new-family');
   const registrations = getNewFamilyRegistrations();
+  const target = registrations.find(registration => registration.id === id);
   saveNewFamilyRegistrations(registrations.filter(r => r.id !== id));
+
+  if (target) {
+    logAdminActivity({
+      actor: admin,
+      action: 'new-family.delete',
+      summary: `새가족 등록 "${target.name}" 기록을 삭제했습니다.`,
+      targetType: 'new-family-registration',
+      targetId: target.id,
+    });
+  }
+
   revalidateAdmin(['/admin/new-family']);
 }

@@ -8,16 +8,10 @@ import { usePathname } from 'next/navigation';
 
 import { aboutSections } from '@/components/about/aboutSections';
 import { siteAssets } from '@/lib/site';
-
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  role: string | null;
-} | null;
+import type { PublicUser } from '@/lib/user-permissions';
 
 type NavbarClientProps = {
-  currentUser: User;
+  currentUser: PublicUser | null;
   logoutAction: () => Promise<void>;
 };
 
@@ -58,34 +52,51 @@ function NavbarClientContent({
   const isHomePage = pathname === '/';
 
   const transparentMode = !isScrolled;
+  const homeOverlayMode = transparentMode && isHomePage;
 
   useEffect(() => {
     lastScrollY.current = window.scrollY;
+    let frameId = 0;
 
     const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-
-      setIsScrolled(currentScrollY > 50);
-
-      if (!isHomePage) {
-        const diff = currentScrollY - lastScrollY.current;
-
-        if (diff > 10 && currentScrollY > 150) {
-          setIsVisible(false);
-        } else if (diff < 0 || currentScrollY < 20) {
-          setIsVisible(true);
-        }
-      } else {
-        setIsVisible(true);
+      if (frameId) {
+        return;
       }
 
-      lastScrollY.current = currentScrollY;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        const currentScrollY = window.scrollY;
+
+        setIsScrolled(previous => {
+          const next = currentScrollY > 50;
+          return previous === next ? previous : next;
+        });
+
+        if (!isHomePage) {
+          const diff = currentScrollY - lastScrollY.current;
+          const nextVisible = !(diff > 10 && currentScrollY > 150);
+
+          if (diff < 0 || currentScrollY < 20 || !nextVisible) {
+            setIsVisible(previous => (previous === nextVisible ? previous : nextVisible));
+          }
+        } else {
+          setIsVisible(previous => (previous ? previous : true));
+        }
+
+        lastScrollY.current = currentScrollY;
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
 
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
   }, [isHomePage]);
 
   const textColor = transparentMode
@@ -177,11 +188,11 @@ function NavbarClientContent({
                 {currentUser.role === 'admin' ? (
                   <Link
                     href="/admin"
-                    className="rounded-xl border px-5 py-2.5 text-base font-bold transition-all duration-200 hover:scale-[1.02]"
-                    style={{
-                      borderColor: transparentMode ? 'rgba(255,255,255,0.4)' : '#D9C7B1',
-                      color: transparentMode ? 'white' : '#8B5E34',
-                      backgroundColor: transparentMode ? 'rgba(255,255,255,0.1)' : '#FFF8F1',
+                  className="rounded-xl border px-5 py-2.5 text-base font-bold transition-all duration-200 hover:scale-[1.02]"
+                  style={{
+                      borderColor: homeOverlayMode ? 'rgba(255,255,255,0.4)' : '#D9C7B1',
+                      color: homeOverlayMode ? 'white' : '#8B5E34',
+                      backgroundColor: homeOverlayMode ? 'rgba(255,255,255,0.1)' : '#FFF8F1',
                     }}
                   >
                     관리자
@@ -190,8 +201,8 @@ function NavbarClientContent({
                 <span
                   className="max-w-32 truncate rounded-xl px-5 py-2.5 text-base font-bold"
                   style={{
-                    color: transparentMode ? 'white' : '#6B7280',
-                    backgroundColor: transparentMode ? 'rgba(255,255,255,0.15)' : '#F8F4EE',
+                    color: homeOverlayMode ? 'white' : '#6B7280',
+                    backgroundColor: homeOverlayMode ? 'rgba(255,255,255,0.15)' : '#F8F4EE',
                   }}
                   title={currentUser.name}
                 >
@@ -211,9 +222,9 @@ function NavbarClientContent({
                   href="/login"
                   className="rounded-xl border px-5 py-2.5 text-base font-bold transition-all duration-200 hover:scale-[1.02]"
                   style={{
-                    borderColor: transparentMode ? 'rgba(255,255,255,0.4)' : '#E7D8C8',
-                    color: transparentMode ? 'white' : '#6B7280',
-                    backgroundColor: transparentMode ? 'rgba(255,255,255,0.1)' : '#FFFFFF',
+                    borderColor: homeOverlayMode ? 'rgba(255,255,255,0.4)' : '#E7D8C8',
+                    color: homeOverlayMode ? 'white' : '#6B7280',
+                    backgroundColor: homeOverlayMode ? 'rgba(255,255,255,0.1)' : '#FFFFFF',
                   }}
                 >
                   로그인

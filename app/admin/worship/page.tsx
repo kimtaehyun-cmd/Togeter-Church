@@ -1,7 +1,9 @@
 import { Clock3, PlusCircle, Save, Trash2 } from 'lucide-react';
 
 import AdminShell from '@/app/admin/_components/AdminShell';
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton';
 import { createWorshipSection, deleteWorshipSection, updateWorshipSection } from '@/lib/actions';
+import { requireAdmin } from '@/lib/auth';
 import { getWorshipSchedule } from '@/lib/data';
 
 function toServiceTextareaValue(
@@ -10,7 +12,8 @@ function toServiceTextareaValue(
   return services.map(service => [service.name, service.time, service.location, service.note].join(' | ')).join('\n');
 }
 
-export default function AdminWorshipPage() {
+export default async function AdminWorshipPage() {
+  await requireAdmin('/admin/worship');
   const schedule = getWorshipSchedule();
 
   return (
@@ -165,14 +168,14 @@ export default function AdminWorshipPage() {
                   </form>
                   <div className="mt-3 flex justify-end">
                     <form action={deleteWorshipSection.bind(null, section.id)}>
-                      <button
-                        type="submit"
+                      <ConfirmSubmitButton
+                        confirmMessage={`"${section.day}" 예배 시간표 섹션을 삭제할까요? 복구할 수 없습니다.`}
                         className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
                         style={{ borderColor: '#FECACA', color: '#B91C1C', backgroundColor: '#FEF2F2' }}
                       >
                         <Trash2 size={15} />
                         삭제
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </div>

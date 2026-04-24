@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  ShieldCheck,
   Bell,
   ChevronRight,
   Clock3,
@@ -12,24 +13,30 @@ import {
 } from 'lucide-react';
 
 import AdminShell from '@/app/admin/_components/AdminShell';
+import { requireAdmin } from '@/lib/auth';
 import {
   getAnnouncements,
+  getAdminActivityLogs,
   getChurchProfile,
   getSermons,
   getSliderItems,
   getTogetherPosts,
+  getUsers,
   getWorshipSchedule,
   getNewFamilyRegistrations,
 } from '@/lib/data';
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  await requireAdmin('/admin');
   const announcements = getAnnouncements();
   const sermons = getSermons();
   const sliderItems = getSliderItems();
   const churchProfile = getChurchProfile();
   const worshipSchedule = getWorshipSchedule();
-  const togetherPosts = getTogetherPosts();
+  const togetherPosts = getTogetherPosts({ includeHidden: true });
   const registrations = getNewFamilyRegistrations();
+  const admins = getUsers().filter(user => user.role === 'admin');
+  const activityLogs = getAdminActivityLogs();
 
   const stats = [
     {
@@ -85,6 +92,15 @@ export default function AdminPage() {
       href: '/admin/together',
       bg: '#FDF2F8',
       color: '#DB2777',
+    },
+    {
+      label: '관리자 접근',
+      count: admins.length,
+      helper: `${activityLogs.length}건 활동 로그`,
+      icon: ShieldCheck,
+      href: '/admin/access',
+      bg: '#EEF2FF',
+      color: '#4338CA',
     },
     {
       label: '새가족 등록',
@@ -202,6 +218,13 @@ export default function AdminPage() {
               description: '갤러리 게시글을 삭제하거나 숨김 처리할 수 있습니다.',
               icon: Image,
               color: '#DB2777',
+            },
+            {
+              href: '/admin/access',
+              label: '관리자 접근 관리',
+              description: '관리자 계정, 비밀번호 변경, 최근 활동 로그를 확인합니다.',
+              icon: ShieldCheck,
+              color: '#4338CA',
             },
             {
               href: '/admin/new-family',

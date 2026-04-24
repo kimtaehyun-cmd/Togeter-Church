@@ -1,12 +1,12 @@
-import sanctuaryPhoto from '@/image/church-background.png';
-import heroSlide2Photo from '@/image/main_3.png';
-import heroSlide3Photo from '@/image/main_4.png';
-import communityPhoto from '@/image/sub_1.png';
-import coreValue1Photo from '@/image/sub_2.png';
-import coreValue2Photo from '@/image/sub_3.png';
-import coreValue3Photo from '@/image/sub_4.png';
-import togetherLogo from '@/image/logo.png';
-import mapPhoto from '@/image/map.png';
+import sanctuaryPhoto from '@/image/church-background.webp';
+import heroSlide2Photo from '@/image/main_3.webp';
+import heroSlide3Photo from '@/image/main_4.webp';
+import communityPhoto from '@/image/sub_1.webp';
+import coreValue1Photo from '@/image/sub_2.webp';
+import coreValue2Photo from '@/image/sub_3.webp';
+import coreValue3Photo from '@/image/sub_4.webp';
+import togetherLogo from '@/image/logo.webp';
+import mapPhoto from '@/image/map.webp';
 
 export const siteAssets = {
   sanctuaryPhoto,

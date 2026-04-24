@@ -3,9 +3,7 @@ import Link from 'next/link';
 
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
-import PageHero from '@/components/PageHero';
 import { getAnnouncements } from '@/lib/data';
-import { siteAssets } from '@/lib/site';
 
 export default function NewsPage() {
   const announcements = getAnnouncements();

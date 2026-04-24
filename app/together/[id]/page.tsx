@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import TogetherViewCount from '@/components/together/TogetherViewCount';
 import { getTogetherPosts } from '@/lib/data';
 
 export default async function TogetherDetail({ params }: { params: Promise<{ id: string }> }) {
@@ -44,6 +45,7 @@ export default async function TogetherDetail({ params }: { params: Promise<{ id:
                 <Calendar size={18} className="text-[#94A3B8]" />
                 <span>{post.date}</span>
               </div>
+              <TogetherViewCount key={post.id} postId={post.id} initialViews={post.views} />
             </div>
           </header>
 

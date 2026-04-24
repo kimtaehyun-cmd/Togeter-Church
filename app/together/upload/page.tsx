@@ -6,6 +6,8 @@ import { getCurrentUser } from '@/lib/auth';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import UploadForm from '@/components/together/UploadForm';
+import UploadAccessRequestPanel from '@/components/together/UploadAccessRequestPanel';
+import { canUploadTogether, hasPendingTogetherUploadRequest } from '@/lib/user-permissions';
 
 export default async function TogetherUploadPage() {
   const user = await getCurrentUser();
@@ -13,6 +15,8 @@ export default async function TogetherUploadPage() {
   if (!user) {
     redirect('/login?next=/together/upload');
   }
+
+  const canUpload = canUploadTogether(user);
 
   return (
     <>
@@ -34,9 +38,15 @@ export default async function TogetherUploadPage() {
             <p className="mt-4 text-lg text-[#64748B]">함께 울고 함께 웃는 우리의 소중한 순간들을 기록해주세요.</p>
           </div>
 
-          <div className="rounded-[2.5rem] border bg-white p-8 md:p-12 shadow-sm" style={{ borderColor: '#EEE4D7' }}>
-            <UploadForm />
-          </div>
+          {canUpload ? (
+            <div className="rounded-[2.5rem] border bg-white p-8 md:p-12 shadow-sm" style={{ borderColor: '#EEE4D7' }}>
+              <UploadForm />
+            </div>
+          ) : (
+            <UploadAccessRequestPanel
+              initialPending={hasPendingTogetherUploadRequest(user)}
+            />
+          )}
         </div>
       </main>
       <Footer />

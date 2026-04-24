@@ -3,10 +3,15 @@ import { ArrowUpRight, MapPin } from 'lucide-react';
 
 import AboutPageFrame from './AboutPageFrame';
 import { getChurchProfile } from '@/lib/data';
+import { normalizeSafeMapUrl } from '@/lib/safe-url';
 import { siteAssets } from '@/lib/site';
 
 export default function DirectionsContent() {
   const churchProfile = getChurchProfile();
+  const directionsUrl = normalizeSafeMapUrl(
+    churchProfile.mapDirectionsUrl,
+    'https://www.google.com/maps?q=%EC%84%9C%EC%9A%B8%EC%8B%9C%20%EB%8F%84%EB%B4%89%EA%B5%AC%20%EB%8F%84%EB%8B%B9%EB%A1%9C%20118',
+  );
 
   return (
     <AboutPageFrame
@@ -31,7 +36,7 @@ export default function DirectionsContent() {
               style={{ borderColor: '#EEE4D7', height: '420px' }}
             >
               <a
-                href={churchProfile.mapDirectionsUrl}
+                href={directionsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="relative block h-full w-full"
@@ -111,7 +116,7 @@ export default function DirectionsContent() {
               </div>
 
               <a
-                href={churchProfile.mapDirectionsUrl}
+                href={directionsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-6 inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold"

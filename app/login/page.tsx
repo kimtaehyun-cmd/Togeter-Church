@@ -3,6 +3,16 @@ import { Suspense } from 'react';
 import AuthForm from '@/components/auth/AuthForm';
 import { redirectIfAuthenticated } from '@/lib/auth';
 
+type LoginPageProps = {
+  searchParams: Promise<{
+    next?: string | string[];
+  }>;
+};
+
+function getSingleQueryValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? '' : value ?? '';
+}
+
 function AuthFormFallback() {
   return (
     <div
@@ -16,8 +26,9 @@ function AuthFormFallback() {
   );
 }
 
-export default async function LoginPage() {
-  await redirectIfAuthenticated();
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const resolvedSearchParams = await searchParams;
+  await redirectIfAuthenticated(getSingleQueryValue(resolvedSearchParams.next));
 
   return (
     <main

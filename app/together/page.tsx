@@ -5,6 +5,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { getTogetherPosts } from '@/lib/data';
 import { getCurrentUser } from '@/lib/auth';
+import { canUploadTogether, hasPendingTogetherUploadRequest } from '@/lib/user-permissions';
 import RegisterButton from '@/components/together/RegisterButton';
 
 type TogetherPageProps = {
@@ -98,7 +99,7 @@ export default async function TogetherPage({ searchParams }: TogetherPageProps) 
           {filteredPosts.length > 0 ? (
             <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
               {filteredPosts.map((post) => (
-                <Link key={post.id} href={`/together/${post.id}`} className="group block">
+                <Link key={post.id} href={`/together/${post.id}`} prefetch={false} className="group block">
                   <div className="relative overflow-hidden rounded-[2rem] border bg-white transition-all duration-500 hover:shadow-2xl hover:-translate-y-2" style={{ borderColor: '#EEE4D7' }}>
                     <div className="relative aspect-[4/3] overflow-hidden">
                       <Image
@@ -149,7 +150,11 @@ export default async function TogetherPage({ searchParams }: TogetherPageProps) 
 
           {/* Registration Button */}
           <div className="mt-20 flex justify-center">
-            <RegisterButton isLoggedIn={!!user} />
+            <RegisterButton
+              isLoggedIn={!!user}
+              canUpload={canUploadTogether(user)}
+              hasPendingRequest={hasPendingTogetherUploadRequest(user)}
+            />
           </div>
         </div>
       </main>

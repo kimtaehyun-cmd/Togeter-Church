@@ -1,21 +1,20 @@
 import { 
   Calendar, 
   Trash2, 
-  User, 
   Phone, 
   MapPin, 
-  Clock, 
   Users, 
   Heart,
-  ExternalLink,
-  ChevronRight
 } from 'lucide-react';
 
 import AdminShell from '@/app/admin/_components/AdminShell';
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton';
 import { deleteNewFamilyRegistration } from '@/lib/actions';
+import { requireAdmin } from '@/lib/auth';
 import { getNewFamilyRegistrations } from '@/lib/data';
 
-export default function AdminNewFamilyPage() {
+export default async function AdminNewFamilyPage() {
+  await requireAdmin('/admin/new-family');
   const registrations = getNewFamilyRegistrations().sort((a, b) => 
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
@@ -127,13 +126,13 @@ export default function AdminNewFamilyPage() {
 
                 <div className="mt-10 flex items-center justify-end border-t pt-6" style={{ borderColor: '#F1F5F9' }}>
                   <form action={deleteNewFamilyRegistration.bind(null, reg.id)}>
-                    <button
-                      type="submit"
+                    <ConfirmSubmitButton
+                      confirmMessage={`${reg.name}님의 새가족 신청 기록을 삭제할까요? 복구할 수 없습니다.`}
                       className="inline-flex items-center gap-2 rounded-xl border border-red-100 bg-red-50/50 px-5 py-2.5 text-sm font-bold text-red-600 transition-all hover:bg-red-100"
                     >
                       <Trash2 size={16} />
                       기록 삭제
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                 </div>
               </div>

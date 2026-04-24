@@ -22,6 +22,13 @@ export default function AboutPageFrame({
 }: AboutPageFrameProps) {
   return (
     <main className="flex-1 pt-32 md:pt-40">
+      <PageHero
+        eyebrow={eyebrow}
+        title={title}
+        description={description}
+        image={image}
+        align={align}
+      />
       {children}
     </main>
   );

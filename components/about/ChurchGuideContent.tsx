@@ -1,9 +1,9 @@
 import Image from 'next/image';
-import { CheckCircle2, Heart, Sparkles, Users } from 'lucide-react';
+import { Heart, Sparkles, Users } from 'lucide-react';
 
 import AboutPageFrame from './AboutPageFrame';
 import { getChurchProfile } from '@/lib/data';
-import { coreValues, firstVisitPoints, siteAssets } from '@/lib/site';
+import { coreValues, siteAssets } from '@/lib/site';
 
 export default function ChurchGuideContent() {
   const churchProfile = getChurchProfile();

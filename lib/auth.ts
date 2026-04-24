@@ -91,6 +91,10 @@ function safeRedirectPath(pathname: string | null | undefined, fallback: string)
   return pathname;
 }
 
+export function hasAdminUser() {
+  return getUsers().some(user => user.role === 'admin');
+}
+
 export function hashPassword(password: string) {
   const salt = randomBytes(16).toString('hex');
   const hash = scryptSync(password, salt, 64).toString('hex');
@@ -200,10 +204,15 @@ export async function requireUser(nextPath?: string) {
 }
 
 export async function requireAdmin(nextPath = '/admin') {
+  if (!hasAdminUser()) {
+    redirect(`/admin/setup?next=${encodeURIComponent(safeRedirectPath(nextPath, '/admin'))}`);
+  }
+
   const user = await getCurrentUser();
+  const safePath = safeRedirectPath(nextPath, '/admin');
 
   if (!user) {
-    redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+    redirect(`/login?next=${encodeURIComponent(safePath)}`);
   }
 
   if (user.role !== 'admin') {
@@ -213,14 +222,14 @@ export async function requireAdmin(nextPath = '/admin') {
   return user;
 }
 
-export async function redirectIfAuthenticated() {
+export async function redirectIfAuthenticated(nextPath?: string | null) {
   const user = await getCurrentUser();
 
   if (!user) {
     return;
   }
 
-  redirect(user.role === 'admin' ? '/admin' : '/');
+  redirect(resolvePostLoginPath(user, nextPath));
 }
 
 export function resolvePostLoginPath(user: User, nextPath?: string | null) {

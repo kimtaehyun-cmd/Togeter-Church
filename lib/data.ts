@@ -1,8 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { workAsyncStorage } from 'next/dist/server/app-render/work-async-storage.external.js';
 
 const dataDir = path.join(process.cwd(), 'data');
+const DATA_FILE_LOCK_TIMEOUT_MS = 3000;
+const DATA_FILE_LOCK_STALE_MS = 30000;
+const DATA_FILE_LOCK_RETRY_MS = 20;
+const TOGETHER_VIEW_FLUSH_DELAY_MS = 1500;
+const TOGETHER_VIEW_FLUSH_BATCH_SIZE = 24;
 
 export interface Announcement {
   id: string;
@@ -32,6 +36,22 @@ export interface User {
   email: string;
   passwordHash: string;
   role: 'admin' | 'member';
+  createdAt: string;
+  togetherUploadStatus?: 'none' | 'pending' | 'approved' | 'rejected';
+  togetherUploadRequestedAt?: string;
+  togetherUploadReviewedAt?: string;
+  togetherUploadReviewedBy?: string;
+}
+
+export interface AdminActivityLogEntry {
+  id: string;
+  actorUserId: string;
+  actorName: string;
+  actorEmail: string;
+  action: string;
+  summary: string;
+  targetType: string;
+  targetId: string;
   createdAt: string;
 }
 
@@ -80,6 +100,9 @@ export interface WorshipScheduleSection {
   services: WorshipService[];
 }
 
+export const NEW_FAMILY_PREFERRED_DEPARTMENTS = ['장년부', '청년부', '학생부'] as const;
+export const NEW_FAMILY_REGISTRATION_TYPES = ['새가족 등록', '교적 등록', '정착 상담'] as const;
+
 export interface NewFamilyRegistration {
   id: string;
   name: string;
@@ -87,8 +110,8 @@ export interface NewFamilyRegistration {
   phone: string;
   address: string;
   detailAddress: string;
-  preferredDepartment: '성인교구' | '청년부' | '학생부';
-  registrationType: '새가족 등록' | '교적 등록' | '정착 상담';
+  preferredDepartment: (typeof NEW_FAMILY_PREFERRED_DEPARTMENTS)[number];
+  registrationType: (typeof NEW_FAMILY_REGISTRATION_TYPES)[number];
   firstVisitDate: string;
   inviterName: string;
   inviterPhone: string;
@@ -98,11 +121,81 @@ export interface NewFamilyRegistration {
   createdAt: string;
 }
 
-function readJsonFile<T>(filename: string, fallback: T): T {
-  const filePath = path.join(dataDir, filename);
+function sleepSync(ms: number) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function ensureDataDir() {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+
+function getDataFilePath(filename: string) {
+  const filePath = path.resolve(dataDir, filename);
+
+  if (filePath !== dataDir && !filePath.startsWith(`${dataDir}${path.sep}`)) {
+    throw new Error('Invalid data file path.');
+  }
+
+  return filePath;
+}
+
+function getDataLockFilePath(filename: string) {
+  return `${getDataFilePath(filename)}.lock`;
+}
+
+function withJsonFileLock<T>(filename: string, task: () => T): T {
+  ensureDataDir();
+
+  const lockFilePath = getDataLockFilePath(filename);
+  const startedAt = Date.now();
+  let lockFileDescriptor: number | null = null;
+
+  while (lockFileDescriptor === null) {
+    try {
+      lockFileDescriptor = fs.openSync(lockFilePath, 'wx');
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'EEXIST'
+      ) {
+        try {
+          const lockStats = fs.statSync(lockFilePath);
+
+          if (Date.now() - lockStats.mtimeMs > DATA_FILE_LOCK_STALE_MS) {
+            fs.rmSync(lockFilePath, { force: true });
+            continue;
+          }
+        } catch {
+          continue;
+        }
+
+        if (Date.now() - startedAt > DATA_FILE_LOCK_TIMEOUT_MS) {
+          throw new Error('Data file is busy. Please try again.');
+        }
+
+        sleepSync(DATA_FILE_LOCK_RETRY_MS);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  try {
+    return task();
+  } finally {
+    fs.closeSync(lockFileDescriptor);
+    fs.rmSync(lockFilePath, { force: true });
+  }
+}
+
+function readJsonFileUnlocked<T>(filename: string, fallback: T): T {
+  ensureDataDir();
+  const filePath = getDataFilePath(filename);
 
   if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(fallback, null, 2), 'utf-8');
     return fallback;
   }
 
@@ -110,9 +203,38 @@ function readJsonFile<T>(filename: string, fallback: T): T {
   return JSON.parse(raw) as T;
 }
 
+function writeJsonFileUnlocked<T>(filename: string, data: T): void {
+  ensureDataDir();
+  const filePath = getDataFilePath(filename);
+  const tempFilePath = `${filePath}.${process.pid}.${Date.now()}.${Math.random()
+    .toString(36)
+    .slice(2)}.tmp`;
+
+  fs.writeFileSync(tempFilePath, `${JSON.stringify(data, null, 2)}\n`, 'utf-8');
+  fs.renameSync(tempFilePath, filePath);
+}
+
+function readJsonFile<T>(filename: string, fallback: T): T {
+  const filePath = getDataFilePath(filename);
+
+  if (fs.existsSync(filePath)) {
+    return readJsonFileUnlocked(filename, fallback);
+  }
+
+  return withJsonFileLock(filename, () => {
+    if (!fs.existsSync(filePath)) {
+      writeJsonFileUnlocked(filename, fallback);
+      return fallback;
+    }
+
+    return readJsonFileUnlocked(filename, fallback);
+  });
+}
+
 function writeJsonFile<T>(filename: string, data: T): void {
-  const filePath = path.join(dataDir, filename);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+  withJsonFileLock(filename, () => {
+    writeJsonFileUnlocked(filename, data);
+  });
 }
 
 export function getAnnouncements(): Announcement[] {
@@ -137,6 +259,14 @@ export function getUsers(): User[] {
 
 export function saveUsers(data: User[]): void {
   writeJsonFile('users.json', data);
+}
+
+export function getAdminActivityLogs(): AdminActivityLogEntry[] {
+  return readJsonFile<AdminActivityLogEntry[]>('admin-activity-log.json', []);
+}
+
+export function saveAdminActivityLogs(data: AdminActivityLogEntry[]): void {
+  writeJsonFile('admin-activity-log.json', data);
 }
 
 export function getSliderItems(): SliderItem[] {
@@ -195,20 +325,105 @@ export interface TogetherPostsOptions {
   includeHidden?: boolean;
 }
 
-function shouldIncludeHiddenTogetherPostsByDefault() {
-  const route = workAsyncStorage.getStore()?.route;
-  return typeof route === 'string' && route.startsWith('/admin');
+let cachedTogetherPosts: TogetherPost[] | null = null;
+let togetherViewsDirty = false;
+let pendingTogetherViewCount = 0;
+let togetherViewFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cloneTogetherPost(post: TogetherPost): TogetherPost {
+  return {
+    ...post,
+    images: [...post.images],
+  };
+}
+
+function cloneTogetherPosts(posts: TogetherPost[]): TogetherPost[] {
+  return posts.map(cloneTogetherPost);
+}
+
+function getTogetherPostsStore() {
+  if (!cachedTogetherPosts) {
+    cachedTogetherPosts = readJsonFile<TogetherPost[]>('together.json', []).map(cloneTogetherPost);
+  }
+
+  return cachedTogetherPosts;
+}
+
+function clearTogetherViewFlushTimer() {
+  if (!togetherViewFlushTimer) {
+    return;
+  }
+
+  clearTimeout(togetherViewFlushTimer);
+  togetherViewFlushTimer = null;
+}
+
+function flushTogetherPostViews() {
+  if (!togetherViewsDirty) {
+    return;
+  }
+
+  writeJsonFile('together.json', getTogetherPostsStore());
+  togetherViewsDirty = false;
+  pendingTogetherViewCount = 0;
+}
+
+function scheduleTogetherPostViewFlush() {
+  clearTogetherViewFlushTimer();
+  togetherViewFlushTimer = setTimeout(() => {
+    togetherViewFlushTimer = null;
+    flushTogetherPostViews();
+  }, TOGETHER_VIEW_FLUSH_DELAY_MS);
+  togetherViewFlushTimer.unref?.();
 }
 
 export function getTogetherPosts(options?: TogetherPostsOptions): TogetherPost[] {
-  const posts = readJsonFile<TogetherPost[]>('together.json', []);
-  const includeHidden = options?.includeHidden ?? shouldIncludeHiddenTogetherPostsByDefault();
+  const posts = getTogetherPostsStore();
+  const includeHidden = options?.includeHidden ?? false;
 
-  return includeHidden ? posts : posts.filter(post => !post.hidden);
+  return cloneTogetherPosts(includeHidden ? posts : posts.filter(post => !post.hidden));
 }
 
 export function saveTogetherPosts(data: TogetherPost[]): void {
-  writeJsonFile('together.json', data);
+  const latestViewsById = new Map(
+    getTogetherPostsStore().map(post => [post.id, post.views ?? 0] as const),
+  );
+  const mergedData = data.map(post => ({
+    ...cloneTogetherPost(post),
+    views: latestViewsById.get(post.id) ?? post.views ?? 0,
+  }));
+
+  clearTogetherViewFlushTimer();
+  cachedTogetherPosts = mergedData;
+  togetherViewsDirty = false;
+  pendingTogetherViewCount = 0;
+  writeJsonFile('together.json', mergedData);
+}
+
+export function incrementTogetherPostViews(id: string): number | null {
+  const posts = getTogetherPostsStore();
+  const targetIndex = posts.findIndex(post => post.id === id);
+
+  if (targetIndex < 0 || posts[targetIndex]?.hidden) {
+    return null;
+  }
+
+  const nextViews = (posts[targetIndex]?.views ?? 0) + 1;
+  posts[targetIndex] = {
+    ...cloneTogetherPost(posts[targetIndex]),
+    views: nextViews,
+  };
+  togetherViewsDirty = true;
+  pendingTogetherViewCount += 1;
+
+  if (pendingTogetherViewCount >= TOGETHER_VIEW_FLUSH_BATCH_SIZE) {
+    clearTogetherViewFlushTimer();
+    flushTogetherPostViews();
+  } else {
+    scheduleTogetherPostViewFlush();
+  }
+
+  return nextViews;
 }
 
 export function getNewFamilyRegistrations(): NewFamilyRegistration[] {

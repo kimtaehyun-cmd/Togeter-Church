@@ -1,16 +1,20 @@
 import { ImageIcon, PlusCircle, Save, Trash2 } from 'lucide-react';
 
 import AdminShell from '@/app/admin/_components/AdminShell';
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton';
 import { createSliderItem, deleteSliderItem, updateSliderItem } from '@/lib/actions';
+import { requireAdmin } from '@/lib/auth';
+import { getAllowedSliderImagePath, SLIDER_IMAGE_OPTIONS } from '@/lib/slider-images';
 import { getSliderItems } from '@/lib/data';
 
-export default function AdminSliderPage() {
+export default async function AdminSliderPage() {
+  await requireAdmin('/admin/slider');
   const sliderItems = getSliderItems();
 
   return (
     <AdminShell
       title="메인 슬라이더 관리"
-      description="메인 비주얼 문구, 버튼 텍스트, 연결 링크, 이미지 경로, 노출 순서를 직접 수정할 수 있습니다."
+      description="메인 비주얼 문구, 버튼 텍스트, 연결 링크, 슬라이드 이미지, 노출 순서를 직접 수정할 수 있습니다. 모든 슬라이드를 비노출로 두면 홈페이지에는 기본 환영 슬라이드가 표시됩니다."
     >
       <div className="grid gap-8 lg:grid-cols-[0.92fr_1.08fr]">
         <section className="rounded-[1.75rem] border bg-white p-6" style={{ borderColor: '#E2E8F0' }}>
@@ -75,15 +79,23 @@ export default function AdminSliderPage() {
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium" style={{ color: '#475569' }}>
-                이미지 경로
+                슬라이드 이미지
               </label>
-              <input
+              <select
                 name="imagePath"
-                type="text"
-                defaultValue="/image/church-background.png"
+                defaultValue="/image/church-background.webp"
                 className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
                 style={{ borderColor: '#E2E8F0', backgroundColor: '#FAFAFA', color: '#1E1B4B' }}
-              />
+              >
+                {SLIDER_IMAGE_OPTIONS.map(option => (
+                  <option key={option.path} value={option.path}>
+                    {option.label} · {option.description}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs" style={{ color: '#94A3B8' }}>
+                허용된 이미지 중에서 선택하면 홈페이지와 동일한 결과로 반영됩니다.
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -267,15 +279,23 @@ export default function AdminSliderPage() {
                     </div>
                     <div>
                       <label className="mb-1.5 block text-xs font-medium" style={{ color: '#475569' }}>
-                        이미지 경로
+                        슬라이드 이미지
                       </label>
-                      <input
+                      <select
                         name="imagePath"
-                        type="text"
-                        defaultValue={item.imagePath}
+                        defaultValue={getAllowedSliderImagePath(item.imagePath)}
                         className="w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
                         style={{ borderColor: '#E2E8F0', backgroundColor: '#FAFAFA', color: '#1E1B4B' }}
-                      />
+                      >
+                        {SLIDER_IMAGE_OPTIONS.map(option => (
+                          <option key={option.path} value={option.path}>
+                            {option.label} · {option.description}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1.5 text-xs" style={{ color: '#94A3B8' }}>
+                        저장 시 허용된 이미지 경로만 반영됩니다.
+                      </p>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div>
@@ -367,14 +387,14 @@ export default function AdminSliderPage() {
                   </form>
                   <div className="mt-3 flex justify-end">
                     <form action={deleteSliderItem.bind(null, item.id)}>
-                      <button
-                        type="submit"
+                      <ConfirmSubmitButton
+                        confirmMessage={`"${item.title}" 슬라이드를 삭제할까요? 복구할 수 없습니다.`}
                         className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
                         style={{ borderColor: '#FECACA', color: '#B91C1C', backgroundColor: '#FEF2F2' }}
                       >
                         <Trash2 size={15} />
                         삭제
-                      </button>
+                      </ConfirmSubmitButton>
                     </form>
                   </div>
                 </div>

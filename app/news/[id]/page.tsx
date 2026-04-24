@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, Calendar, Tag, Bell } from 'lucide-react';
+import { ArrowLeft, Calendar } from 'lucide-react';
 import { notFound } from 'next/navigation';
 
 import Navbar from '@/components/Navbar';

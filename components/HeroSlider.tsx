@@ -1,74 +1,14 @@
 import HeroSliderClient, { type HeroSlide } from '@/components/HeroSliderClient';
 import { getChurchProfile, getSliderItems } from '@/lib/data';
+import { normalizeSafeHref } from '@/lib/safe-url';
+import { DEFAULT_SLIDER_IMAGE, resolveSlideImage } from '@/lib/slider-images';
 import { siteAssets } from '@/lib/site';
-import type { StaticImageData } from 'next/image';
-
-type SlideImageConfig = {
-  image: StaticImageData;
-  imagePosition?: string;
-};
-
-const defaultSlideImage: SlideImageConfig = {
-  image: siteAssets.sanctuaryPhoto,
-  imagePosition: 'center 34%',
-};
-
-const imageRegistry: Record<string, SlideImageConfig> = {
-  'church-background.png': defaultSlideImage,
-  'main_3.png': {
-    image: siteAssets.heroSlide2Photo,
-    imagePosition: 'center 84%',
-  },
-  'main_4.png': {
-    image: siteAssets.heroSlide3Photo,
-    imagePosition: 'center 52%',
-  },
-  'sub_1.png': {
-    image: siteAssets.communityPhoto,
-    imagePosition: 'center 46%',
-  },
-  'sub_2.png': {
-    image: siteAssets.coreValue1Photo,
-    imagePosition: 'center 32%',
-  },
-  'sub_3.png': {
-    image: siteAssets.coreValue2Photo,
-    imagePosition: 'center 50%',
-  },
-  'sub_4.png': {
-    image: siteAssets.coreValue3Photo,
-    imagePosition: 'center 48%',
-  },
-  'logo.png': {
-    image: siteAssets.togetherLogo,
-    imagePosition: 'center center',
-  },
-  'map.png': {
-    image: siteAssets.mapPhoto,
-    imagePosition: 'center center',
-  },
-};
-
-function normalizeImagePath(imagePath: string) {
-  const normalizedPath = imagePath.trim().replace(/\\/g, '/');
-
-  if (!normalizedPath) {
-    return '';
-  }
-
-  return normalizedPath.split('/').filter(Boolean).pop() ?? normalizedPath;
-}
-
-function resolveSlideImage(imagePath: string): SlideImageConfig {
-  const normalizedPath = normalizeImagePath(imagePath);
-  return imageRegistry[normalizedPath] ?? defaultSlideImage;
-}
 
 export default function HeroSlider() {
   const churchProfile = getChurchProfile();
   const sliderItems = getSliderItems();
   const activeSlides = sliderItems.filter(item => item.active);
-  const sourceSlides = activeSlides.length > 0 ? activeSlides : sliderItems;
+  const sourceSlides = activeSlides;
 
   const slides: HeroSlide[] =
     sourceSlides.length > 0
@@ -84,15 +24,16 @@ export default function HeroSlider() {
             description: item.description,
             accent: item.accent,
             primaryLabel: item.primaryLabel,
-            primaryHref: item.primaryHref,
+            primaryHref: normalizeSafeHref(item.primaryHref, '/about/church-guide'),
             secondaryLabel: item.secondaryLabel,
-            secondaryHref: item.secondaryHref,
+            secondaryHref: normalizeSafeHref(item.secondaryHref, '/about/directions'),
           };
         })
       : [
           {
             id: 'fallback-slide',
-            image: siteAssets.sanctuaryPhoto,
+            image: DEFAULT_SLIDER_IMAGE.image,
+            imagePosition: DEFAULT_SLIDER_IMAGE.imagePosition,
             eyebrow: 'Welcome',
             title: `${churchProfile.churchName}에 오신 것을 환영합니다`,
             description:

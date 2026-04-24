@@ -168,6 +168,16 @@ export default function NewFamilyRegistrationForm() {
         delete next.phone;
       }
 
+      if (
+        name === 'inviterName' ||
+        name === 'inviterPhone1' ||
+        name === 'inviterPhone2' ||
+        name === 'inviterPhone3'
+      ) {
+        delete next.inviterName;
+        delete next.inviterPhone;
+      }
+
       return next;
     });
   }
@@ -313,6 +323,7 @@ export default function NewFamilyRegistrationForm() {
                 maxLength={4}
                 required
                 placeholder="1234"
+                pattern="[0-9]{3,4}"
                 className="min-w-0 rounded-2xl border px-4 py-3 text-sm outline-none transition-colors duration-200"
                 style={{ borderColor: '#E9D7C3', backgroundColor: '#FFFCF8', color: '#1E1B4B' }}
               />
@@ -323,6 +334,7 @@ export default function NewFamilyRegistrationForm() {
                 maxLength={4}
                 required
                 placeholder="5678"
+                pattern="[0-9]{4}"
                 className="min-w-0 rounded-2xl border px-4 py-3 text-sm outline-none transition-colors duration-200"
                 style={{ borderColor: '#E9D7C3', backgroundColor: '#FFFCF8', color: '#1E1B4B' }}
               />
@@ -454,6 +466,7 @@ export default function NewFamilyRegistrationForm() {
                 className="mt-2 w-full min-w-0 rounded-2xl border px-4 py-3 text-sm outline-none transition-colors duration-200"
                 style={{ borderColor: '#E9D7C3', backgroundColor: '#FFFCF8', color: '#1E1B4B' }}
               />
+              <FieldError message={fieldErrors.inviterName} />
             </div>
 
             <div className="min-w-0">
@@ -479,6 +492,7 @@ export default function NewFamilyRegistrationForm() {
                   inputMode="numeric"
                   maxLength={4}
                   placeholder="1234"
+                  pattern="[0-9]{3,4}"
                   className="min-w-0 rounded-2xl border px-4 py-3 text-sm outline-none transition-colors duration-200"
                   style={{ borderColor: '#E9D7C3', backgroundColor: '#FFFCF8', color: '#1E1B4B' }}
                 />
@@ -488,10 +502,12 @@ export default function NewFamilyRegistrationForm() {
                   inputMode="numeric"
                   maxLength={4}
                   placeholder="5678"
+                  pattern="[0-9]{4}"
                   className="min-w-0 rounded-2xl border px-4 py-3 text-sm outline-none transition-colors duration-200"
                   style={{ borderColor: '#E9D7C3', backgroundColor: '#FFFCF8', color: '#1E1B4B' }}
                 />
               </div>
+              <FieldError message={fieldErrors.inviterPhone} />
             </div>
           </div>
 

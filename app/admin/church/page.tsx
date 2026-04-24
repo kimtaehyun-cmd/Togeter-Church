@@ -2,9 +2,11 @@ import { MapPinned, Save } from 'lucide-react';
 
 import AdminShell from '@/app/admin/_components/AdminShell';
 import { updateChurchProfile } from '@/lib/actions';
+import { requireAdmin } from '@/lib/auth';
 import { getChurchProfile } from '@/lib/data';
 
-export default function AdminChurchPage() {
+export default async function AdminChurchPage() {
+  await requireAdmin('/admin/church');
   const profile = getChurchProfile();
 
   return (
